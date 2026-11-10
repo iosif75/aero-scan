@@ -2,7 +2,7 @@
   "test_alerts": 3154,
   "test_real": 159,
   "training_examples": 903,
-  "note": "Both models trained on the same 903 dev examples (all 127 real outside the validation flights, source-stratified routine sample); scored on the full test split.",
+  "note": "Both models trained on the same 903 dev examples (all 127 real outside the validation flights, source-stratified routine sample); scored on the full test split. Computed before the alert context was switched to the detector's own window (identical except right after coverage gaps); eval/results/pipeline.json uses the current version.",
   "gradient_boosting": {
     "roc_auc": 0.971,
     "average_precision": 0.756,

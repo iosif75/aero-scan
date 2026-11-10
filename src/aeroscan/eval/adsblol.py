@@ -20,39 +20,22 @@ import time
 import urllib.error
 import urllib.request
 from collections.abc import Iterator
-from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
+from ..region import BARCELONA, Region
 from .datasets import data_dir
+
+__all__ = ["BARCELONA", "DEFAULT_DAYS_2025", "Region", "extract_day", "load_region", "parse_trace"]
 
 RELEASE_URL = (
     "https://github.com/adsblol/globe_history_{year}/releases/download/"
     "v{tag}-planes-readsb-{pod}/v{tag}-planes-readsb-{pod}.tar.{part}"
 )
 
-
-@dataclass(frozen=True)
-class Region:
-    name: str
-    lat_min: float
-    lat_max: float
-    lon_min: float
-    lon_max: float
-
-    def contains(self, lat: float, lon: float) -> bool:
-        return self.lat_min <= lat <= self.lat_max and self.lon_min <= lon <= self.lon_max
-
-    @property
-    def square_degrees(self) -> float:
-        return (self.lat_max - self.lat_min) * (self.lon_max - self.lon_min)
-
-
-# The live poller's box: El Prat, Girona, Reus, Sabadell and Palma, 20 sq deg (1 OpenSky credit).
-BARCELONA = Region("bcn", 39.3, 43.3, 0.0, 5.0)
 
 # One day per month, alternating midweek and Saturday, so the set covers winter and
 # summer schedules and both weekday and weekend traffic patterns.

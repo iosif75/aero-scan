@@ -1,6 +1,6 @@
 # Aero-Scan
 
-Flight anomaly detection on open ADS-B data, centred on Barcelona–El Prat. **Deterministic rules flag; a learned triage model filters.** A fine-tuned small LLM was tested for the triage step and lost to gradient-boosted trees (see [Alert triage](#alert-triage-milestone-2)).
+Flight anomaly detection on open ADS-B data, centred on Barcelona–El Prat. **Loose deterministic rules flag; a learned triage model filters.** A fine-tuned small LLM was tested for the triage step and lost to gradient-boosted trees (see [Alert triage](#alert-triage-milestone-2)).
 
 The detector watches each aircraft as a once-a-minute poller would see it (the budget of a free [OpenSky](https://opensky-network.org) account) and flags emergency transponder codes, rapid descents from altitude, turnbacks and holding. Every rule is a pure function of a short window of position reports, so it is unit-tested, deterministic, and identical live and in evaluation.
 
@@ -83,6 +83,21 @@ The same-source row is the honest one: real alerts against the normal part of th
 
 Raw numbers: [`eval/results/triage_comparison.json`](eval/results/triage_comparison.json).
 
+### The resulting pipeline
+
+The gradient-boosted model, trained on all dev alerts, goes behind the loose rules (`aeroscan/triage/model.py`). Its threshold is chosen on out-of-fold dev predictions (5 folds, grouped by flight), as the strictest one that still detects as many dev emergencies as the strict rules. The test split is used once, for this table:
+
+| Test split, per flight | Strict rules | Loose rules + triage |
+| --- | --- | --- |
+| Emergency flights detected (of 397) | 94 | **106** |
+| Barcelona flights wrongly flagged (of 18,698) | 110 | **47** |
+| Dublin approaches wrongly flagged (of 8,756) | 73 | **8** |
+| False alarms on the normal part of the 7700 flights | 10 | 10 |
+
+That is 13% more emergencies caught and less than half the Barcelona false alarms: about 8 a day across the whole region instead of about 18. The loose rules alone would catch 132 emergencies but flag 2,709 Barcelona flights; the triage step is what makes them usable.
+
+The live pipeline (`aeroscan/pipeline.py`) runs exactly this: replaying the test flights through it reproduces the table above. Raw numbers: [`eval/results/pipeline.json`](eval/results/pipeline.json). The trained model is not distributed; `aeroscan triage fit` builds it locally.
+
 ## Evaluation method
 
 - **Data.**
@@ -122,11 +137,32 @@ uv run aeroscan eval                # writes eval/results/
 
 `aeroscan eval --skip-bcn` runs without the Barcelona data; `--limit 50` is a quick smoke test.
 
+Triage model (needs the Barcelona data above):
+
+```bash
+uv run --extra triage aeroscan triage build   # labelled alerts -> data/triage
+uv run --extra triage aeroscan triage fit     # model -> models/triage_gbm.pkl, pipeline table -> eval/results
+```
+
+## Live monitoring
+
+```bash
+uv run --extra triage aeroscan live           # polls the Barcelona box every 60 s, alerts -> alerts.sqlite
+```
+
+It uses the triage pipeline if `models/triage_gbm.pkl` exists and falls back to the strict rules otherwise. Emergency squawks are never filtered.
+
+- **Credentials.** Without them, requests are anonymous: 400 credits a day, counted per IP address, so a 60 s poll runs out after about 6.7 hours. With an OpenSky API client (4,000 credits a day; create one on the Account page after logging in at opensky-network.org) it runs all day. Put OpenSky's `credentials.json` in the working directory, or set `OPENSKY_CLIENT_ID` and `OPENSKY_CLIENT_SECRET`. Tokens are refreshed before their 30-minute expiry.
+- **Cost.** The Barcelona box is 20 square degrees, which is 1 credit per poll: 1,440 a day at 60 s.
+- **Behaviour matches the evaluation.** Polls land on a fixed 60 s grid, reports older than one interval are dropped, and units are converted to feet, knots and ft/min at the API boundary.
+- **Storage.** SQLite, standard library only: an `alerts` table (rule, severity, summary, evidence, triage score) and a `polls` table (aircraft seen, alerts raised, alerts suppressed, credits left).
+- **Coverage caveat.** The evaluation measured coverage on adsb.lol data. OpenSky's receiver network around Catalonia may be thinner: a November afternoon test saw about 65 aircraft per poll in the box. Live detection rates can be lower than the offline ones where reports are missing.
+
 ## Roadmap
 
 1. ~~Rules and offline evaluation~~
 2. ~~Alert triage: learned real-vs-routine filter behind looser rules (gradient boosting beat a fine-tuned 1.5B LLM)~~
-3. Live ingestion from the OpenSky REST API (OAuth2 client credentials, 60 s polls over the Barcelona box = 1 credit per poll) and alert storage
+3. ~~Live ingestion from the OpenSky REST API, with the triage pipeline and SQLite alert storage~~
 4. REST API and map UI
 
 ## Data and attribution

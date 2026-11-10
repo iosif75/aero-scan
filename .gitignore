@@ -20,3 +20,4 @@ credentials.json
 # licence requires de-identification before publication. Only aggregates are committed.
 eval/results/flights.csv
 runs/
+models/

@@ -1,0 +1,32 @@
+{
+  "selection": {
+    "threshold": 0.1141,
+    "dev_candidate_max_detected": 123,
+    "dev_target_detected": 92,
+    "dev_out_of_fold": {
+      "emergencies_detected": 92,
+      "bcn_flagged": 51,
+      "dublin_flagged": 10,
+      "pre_onset_alarms": 8
+    }
+  },
+  "strict_rules": {
+    "emergencies_detected": 94,
+    "emergency_flights": 397,
+    "bcn_flagged": 110,
+    "dublin_flagged": 73,
+    "pre_onset_alarms": 10
+  },
+  "loose_rules_plus_triage": {
+    "emergencies_detected": 106,
+    "bcn_flagged": 47,
+    "dublin_flagged": 8,
+    "pre_onset_alarms": 10
+  },
+  "loose_rules_alone": {
+    "emergencies_detected": 132,
+    "bcn_flagged": 2709,
+    "dublin_flagged": 162,
+    "pre_onset_alarms": 68
+  }
+}

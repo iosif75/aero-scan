@@ -63,6 +63,11 @@ class Detector:
                 alerts.append(alert)
         return alerts
 
+    def recent(self, icao24: str) -> tuple[StateVector, ...]:
+        """The aircraft's current window of reports, oldest first (empty if unknown)."""
+        st = self._aircraft.get(icao24)
+        return tuple(st.window) if st else ()
+
     def update_many(self, svs: Iterable[StateVector]) -> list[Alert]:
         out: list[Alert] = []
         for sv in svs:
