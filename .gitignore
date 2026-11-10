@@ -1,0 +1,20 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+
+# Downloaded datasets (fetched and checksummed by `aeroscan fetch-data`)
+data/
+
+# Secrets
+.env
+credentials.json
+
+# Per-flight evaluation output contains aircraft identifiers; the OpenSky data
+# licence requires de-identification before publication. Only aggregates are committed.
+eval/results/flights.csv

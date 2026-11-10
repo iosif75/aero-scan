@@ -1,0 +1,231 @@
+{
+  "interval_s": 60,
+  "squawk7700": {
+    "dev": {
+      "flights": 435,
+      "recall_overall": 0.244,
+      "recall_diverted": 0.561,
+      "detected_by_rule": {
+        "turnback": 61,
+        "rapid_descent": 45
+      },
+      "lead_time_median_s": 161.0,
+      "detected_before_squawk": 26,
+      "pre_onset_flight_hours": 271.0,
+      "pre_onset_false_alarms": 16,
+      "false_alarms_per_flight_hour": 0.059,
+      "squawk_rule_recall": 0.991,
+      "by_category": {
+        "unlabelled": {
+          "flights": 226,
+          "detected": 10
+        },
+        "unclear": {
+          "flights": 100,
+          "detected": 43
+        },
+        "medical": {
+          "flights": 34,
+          "detected": 14
+        },
+        "engine": {
+          "flights": 15,
+          "detected": 4
+        },
+        "cabin_pressure": {
+          "flights": 14,
+          "detected": 10
+        },
+        "technical": {
+          "flights": 10,
+          "detected": 3
+        },
+        "smoke_burn_smell_flames": {
+          "flights": 10,
+          "detected": 7
+        },
+        "misc": {
+          "flights": 4,
+          "detected": 1
+        },
+        "landing_gear": {
+          "flights": 4,
+          "detected": 3
+        },
+        "cracked_windshield": {
+          "flights": 3,
+          "detected": 2
+        },
+        "bird": {
+          "flights": 3,
+          "detected": 1
+        },
+        "instrument": {
+          "flights": 2,
+          "detected": 2
+        },
+        "hydraulics": {
+          "flights": 2,
+          "detected": 0
+        },
+        "weather_damage": {
+          "flights": 1,
+          "detected": 1
+        },
+        "brakes": {
+          "flights": 1,
+          "detected": 1
+        },
+        "air_condition": {
+          "flights": 1,
+          "detected": 1
+        },
+        "hot_air_leak": {
+          "flights": 1,
+          "detected": 1
+        },
+        "bomb_threat": {
+          "flights": 1,
+          "detected": 1
+        },
+        "heating": {
+          "flights": 1,
+          "detected": 1
+        },
+        "fuel_leak": {
+          "flights": 1,
+          "detected": 0
+        },
+        "flaps": {
+          "flights": 1,
+          "detected": 0
+        }
+      }
+    },
+    "test": {
+      "flights": 397,
+      "recall_overall": 0.282,
+      "recall_diverted": 0.599,
+      "detected_by_rule": {
+        "rapid_descent": 43,
+        "turnback": 69
+      },
+      "lead_time_median_s": 160.0,
+      "detected_before_squawk": 25,
+      "pre_onset_flight_hours": 288.7,
+      "pre_onset_false_alarms": 16,
+      "false_alarms_per_flight_hour": 0.0554,
+      "squawk_rule_recall": 1.0,
+      "by_category": {
+        "unlabelled": {
+          "flights": 186,
+          "detected": 10
+        },
+        "unclear": {
+          "flights": 104,
+          "detected": 39
+        },
+        "medical": {
+          "flights": 40,
+          "detected": 24
+        },
+        "technical": {
+          "flights": 11,
+          "detected": 6
+        },
+        "smoke_burn_smell_flames": {
+          "flights": 11,
+          "detected": 8
+        },
+        "engine": {
+          "flights": 10,
+          "detected": 7
+        },
+        "cabin_pressure": {
+          "flights": 9,
+          "detected": 8
+        },
+        "fuel_leak": {
+          "flights": 7,
+          "detected": 3
+        },
+        "hydraulics": {
+          "flights": 4,
+          "detected": 1
+        },
+        "misc": {
+          "flights": 2,
+          "detected": 1
+        },
+        "landing_gear": {
+          "flights": 2,
+          "detected": 1
+        },
+        "cracked_windshield": {
+          "flights": 2,
+          "detected": 1
+        },
+        "maintenance": {
+          "flights": 1,
+          "detected": 0
+        },
+        "door": {
+          "flights": 1,
+          "detected": 0
+        },
+        "bomb_threat": {
+          "flights": 1,
+          "detected": 1
+        },
+        "slats": {
+          "flights": 1,
+          "detected": 0
+        },
+        "instrument": {
+          "flights": 1,
+          "detected": 1
+        },
+        "weather_damage": {
+          "flights": 1,
+          "detected": 0
+        },
+        "bird": {
+          "flights": 1,
+          "detected": 0
+        },
+        "tyre": {
+          "flights": 1,
+          "detected": 1
+        },
+        "operational_issue": {
+          "flights": 1,
+          "detected": 0
+        }
+      }
+    }
+  },
+  "dublin": {
+    "flights": 17701,
+    "flight_hours": 4987.3,
+    "by_split": {
+      "dev": {
+        "flights": 8945,
+        "flights_with_false_alarm": 95,
+        "false_alarm_rate": 0.0106,
+        "by_rule": {
+          "rapid_descent": 18,
+          "turnback": 77
+        }
+      },
+      "test": {
+        "flights": 8756,
+        "flights_with_false_alarm": 87,
+        "false_alarm_rate": 0.0099,
+        "by_rule": {
+          "turnback": 71,
+          "rapid_descent": 16
+        }
+      }
+    }
+  }
+}
