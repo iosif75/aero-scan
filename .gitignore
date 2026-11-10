@@ -21,3 +21,8 @@ credentials.json
 eval/results/flights.csv
 runs/
 models/
+
+# Live monitor database
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

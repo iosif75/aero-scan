@@ -19,12 +19,25 @@ train = [
     "transformers>=4.46",
     "peft>=0.13",
 ]
+api = [
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
+    "scikit-learn>=1.5",  # to load the triage model, if one has been built
+]
 
 [project.scripts]
 aeroscan = "aeroscan.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "ruff>=0.6", "mypy>=1.11", "pandas>=2.2", "pyarrow>=16", "pandas-stubs"]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "pandas>=2.2",
+    "pyarrow>=16",
+    "pandas-stubs",
+    "httpx>=0.28.1",
+]
 
 [build-system]
 requires = ["hatchling"]

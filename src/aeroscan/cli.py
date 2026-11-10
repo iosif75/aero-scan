@@ -36,11 +36,20 @@ def main(argv: list[str] | None = None) -> None:
     tf.add_argument("--model", type=Path, default=DEFAULT_MODEL)
 
     lv = sub.add_parser("live", help="monitor the Barcelona region from the OpenSky API")
-    lv.add_argument("--interval", type=float, default=60.0, help="seconds between polls")
-    lv.add_argument("--db", type=Path, default=Path("alerts.sqlite"))
-    lv.add_argument("--model", type=Path, default=DEFAULT_MODEL, help="triage model, if built")
-    lv.add_argument("--credentials", type=Path, default=Path("credentials.json"))
+    sv = sub.add_parser("serve", help="run the monitor plus the REST API and map")
+    for sp in (lv, sv):
+        sp.add_argument("--interval", type=float, default=60.0, help="seconds between polls")
+        sp.add_argument("--db", type=Path, default=Path("alerts.sqlite"))
+        sp.add_argument("--model", type=Path, default=DEFAULT_MODEL, help="triage model, if built")
+        sp.add_argument("--credentials", type=Path, default=Path("credentials.json"))
     lv.add_argument("--polls", type=int, default=None, help="stop after this many polls")
+    sv.add_argument(
+        "--host", default="127.0.0.1", help="interface to bind (default: this machine only)"
+    )
+    sv.add_argument("--port", type=int, default=8000)
+    sv.add_argument(
+        "--no-live", action="store_true", help="serve an existing database without polling"
+    )
 
     args, rest = p.parse_known_args(argv)
 
@@ -73,9 +82,11 @@ def main(argv: list[str] | None = None) -> None:
         print(f"model saved to {args.model}")
     elif args.cmd == "live":
         _live(args)
+    elif args.cmd == "serve":
+        _serve(args)
 
 
-def _live(args: argparse.Namespace) -> None:
+def _live(args: argparse.Namespace, max_polls: int | None = None) -> None:
     from .live.opensky import Credentials, OpenSkyClient
     from .live.run import budget_warning, run
     from .live.store import AlertStore
@@ -94,12 +105,38 @@ def _live(args: argparse.Namespace) -> None:
     if warning:
         print(f"Note: {warning}")
     store = AlertStore(args.db)
+    store.set_meta(
+        {"mode": pipeline.mode, "region": BARCELONA.name, "interval_s": str(args.interval)}
+    )
     try:
-        run(BARCELONA, pipeline, client, store, args.interval, args.polls)
+        run(
+            BARCELONA,
+            pipeline,
+            client,
+            store,
+            args.interval,
+            max_polls or getattr(args, "polls", None),
+        )
     except KeyboardInterrupt:
         print("stopped")
     finally:
         store.close()
+
+
+def _serve(args: argparse.Namespace) -> None:
+    import threading
+
+    import uvicorn
+
+    from .api.app import create_app
+
+    if not args.no_live:
+        # The poller owns its own SQLite connection, created inside its thread.
+        threading.Thread(target=_live, args=(args,), daemon=True, name="poller").start()
+    print(
+        f"Map and API: http://{args.host}:{args.port}/   docs: http://{args.host}:{args.port}/docs"
+    )
+    uvicorn.run(create_app(args.db), host=args.host, port=args.port, log_level="warning")
 
 
 if __name__ == "__main__":

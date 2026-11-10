@@ -6,6 +6,47 @@ The detector watches each aircraft as a once-a-minute poller would see it (the b
 
 The monitored region is 39.3–43.3°N, 0–5°E: El Prat, Girona, Reus, Sabadell and Palma, 20 square degrees, which is one OpenSky credit per poll.
 
+![Live map of the Barcelona region](docs/map.jpg)
+
+## Run it on your computer
+
+Works on Windows, macOS and Linux. You need an internet connection and nothing else: [uv](https://docs.astral.sh/uv/) installs the right Python by itself.
+
+**1. Install uv** (once), then open a new terminal window.
+
+Windows, in PowerShell:
+```powershell
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+macOS or Linux:
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+**2. Get the code.** With git:
+```bash
+git clone https://github.com/iosif75/aero-scan
+cd aero-scan
+```
+Without git: on GitHub, click **Code → Download ZIP**, extract it, and open a terminal in the extracted folder.
+
+**3. Start the monitor, the API and the map:**
+```bash
+uv run --extra api aeroscan serve
+```
+The first run takes a minute or two to download Python and the dependencies. Then open **http://127.0.0.1:8000** for the map, or **http://127.0.0.1:8000/docs** for the interactive API documentation. Stop it with **Ctrl+C**. Alerts are kept in `alerts.sqlite` in the same folder, so they survive restarts.
+
+**4. Optional: OpenSky credentials, for all-day monitoring.** Without them it runs anonymously and pauses after about 6.7 hours a day. Create a free account at [opensky-network.org](https://opensky-network.org), add an API client on your Account page, download its `credentials.json`, and put it in the project folder. It is picked up automatically, and `.gitignore` keeps it out of git.
+
+**5. Optional: the triage model.** Out of the box the monitor uses the strict rules. To run the better pipeline (loose rules + triage), build the model once; it needs the evaluation data, about 35 GB of downloads and an hour:
+```bash
+uv run --extra triage aeroscan fetch-data --bcn
+uv run --extra triage aeroscan eval
+uv run --extra triage aeroscan triage build
+uv run --extra triage aeroscan triage fit
+```
+The next `serve` picks up `models/triage_gbm.pkl` and says "loose rules + triage" on the map.
+
 ## Results
 
 Rules are evaluated with the **transponder code hidden**, to measure what they catch from movement alone, and with every flight replayed as 60-second polls. Thresholds were set on the dev split; the numbers below are the held-out **test split**.
@@ -123,39 +164,40 @@ The live pipeline (`aeroscan/pipeline.py`) runs exactly this: replaying the test
 
 Rates come from altitude differences between polls, not the reported instantaneous vertical rate. Implausible jumps (> 20,000 ft/min) are treated as corrupt reports, and the detector never reasons across coverage gaps.
 
-## Quick start
-
-Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
+## Reproduce the evaluation
 
 ```bash
-uv sync
+uv sync --extra triage
 uv run pytest                       # unit tests
 uv run aeroscan fetch-data          # ~1 GB, checksummed, cached in ./data
 uv run aeroscan fetch-data --bcn    # plus the Barcelona days: ~35 GB downloaded, ~1 h, ~200 MB kept
 uv run aeroscan eval                # writes eval/results/
+uv run aeroscan triage build        # labelled alerts -> data/triage
+uv run aeroscan triage fit          # model -> models/triage_gbm.pkl, pipeline table -> eval/results
 ```
 
-`aeroscan eval --skip-bcn` runs without the Barcelona data; `--limit 50` is a quick smoke test.
+`aeroscan eval --skip-bcn` runs without the Barcelona data; `--limit 50` is a quick smoke test. Fine-tuning the LLM for the triage comparison needs a CUDA GPU: `uv run --extra train python -m aeroscan.triage.train`.
 
-Triage model (needs the Barcelona data above):
+## Live monitoring and API
 
-```bash
-uv run --extra triage aeroscan triage build   # labelled alerts -> data/triage
-uv run --extra triage aeroscan triage fit     # model -> models/triage_gbm.pkl, pipeline table -> eval/results
-```
+`aeroscan serve` runs the poller in the background and the API in front of it; `aeroscan live` runs the poller alone, and `aeroscan serve --no-live` serves an existing database. The pipeline uses the triage model if `models/triage_gbm.pkl` exists and falls back to the strict rules otherwise. Emergency squawks are never filtered.
 
-## Live monitoring
+| Endpoint | Returns |
+| --- | --- |
+| `GET /api/v1/alerts` | Alerts, newest first. Filters: `since`, `until`, `rule`, `severity`, `icao24`; paging: `limit` (≤ 500), `offset` |
+| `GET /api/v1/alerts/{id}` | One alert, with its evidence and triage score |
+| `GET /api/v1/aircraft` | Aircraft in the latest poll, flagged if alerted in the last `alerted_within_min` minutes |
+| `GET /api/v1/polls` | Recent polls: aircraft seen, alerts raised and filtered, credits left |
+| `GET /api/v1/stats` | Mode, counts, alerts in the last 24 h by rule, credits left |
+| `GET /api/v1/health` | `ok`, `stale` (monitor not polling) or `no_data` |
+| `GET /docs` | Interactive OpenAPI documentation |
 
-```bash
-uv run --extra triage aeroscan live           # polls the Barcelona box every 60 s, alerts -> alerts.sqlite
-```
+The API is read-only: each request opens its own read-only SQLite connection, so it can't interfere with the poller (the database runs in WAL mode for concurrent reads). It listens on `127.0.0.1` by default. OpenSky's terms cover personal and research use, so check them before exposing the API publicly with `--host 0.0.0.0`.
 
-It uses the triage pipeline if `models/triage_gbm.pkl` exists and falls back to the strict rules otherwise. Emergency squawks are never filtered.
-
-- **Credentials.** Without them, requests are anonymous: 400 credits a day, counted per IP address, so a 60 s poll runs out after about 6.7 hours. With an OpenSky API client (4,000 credits a day; create one on the Account page after logging in at opensky-network.org) it runs all day. Put OpenSky's `credentials.json` in the working directory, or set `OPENSKY_CLIENT_ID` and `OPENSKY_CLIENT_SECRET`. Tokens are refreshed before their 30-minute expiry.
+- **Credentials.** Without them, requests are anonymous: 400 credits a day, counted per IP address, so a 60 s poll runs out after about 6.7 hours. With an OpenSky API client (4,000 credits a day) it runs all day. Put OpenSky's `credentials.json` in the working directory, or set `OPENSKY_CLIENT_ID` and `OPENSKY_CLIENT_SECRET`. Tokens are refreshed before their 30-minute expiry.
 - **Cost.** The Barcelona box is 20 square degrees, which is 1 credit per poll: 1,440 a day at 60 s.
 - **Behaviour matches the evaluation.** Polls land on a fixed 60 s grid, reports older than one interval are dropped, and units are converted to feet, knots and ft/min at the API boundary.
-- **Storage.** SQLite, standard library only: an `alerts` table (rule, severity, summary, evidence, triage score) and a `polls` table (aircraft seen, alerts raised, alerts suppressed, credits left).
+- **Storage.** SQLite, standard library only: `alerts`, `polls`, a `positions` snapshot of the latest poll, and `meta` (mode, region, interval).
 - **Coverage caveat.** The evaluation measured coverage on adsb.lol data. OpenSky's receiver network around Catalonia may be thinner: a November afternoon test saw about 65 aircraft per poll in the box. Live detection rates can be lower than the offline ones where reports are missing.
 
 ## Roadmap
@@ -163,13 +205,15 @@ It uses the triage pipeline if `models/triage_gbm.pkl` exists and falls back to 
 1. ~~Rules and offline evaluation~~
 2. ~~Alert triage: learned real-vs-routine filter behind looser rules (gradient boosting beat a fine-tuned 1.5B LLM)~~
 3. ~~Live ingestion from the OpenSky REST API, with the triage pipeline and SQLite alert storage~~
-4. REST API and map UI
+4. ~~REST API and map~~
 
 ## Data and attribution
 
 Trajectory data: The OpenSky Network, https://opensky-network.org. M. Schäfer, M. Strohmeier, V. Lenders, I. Martinovic, M. Wilhelm, *Bringing up OpenSky: A large-scale ADS-B sensor network for research*, IPSN 2014.
 
 squawk7700 dataset: X. Olive, A. Tanner, M. Strohmeier, M. Schäfer, M. Feridun, A. Tart, I. Martinovic, V. Lenders, *Reference datasets for in-flight emergency situations*, Zenodo, 2020, doi:10.5281/zenodo.3937483. Dublin arrivals: 4TU.ResearchData, doi:10.4121/20411868.v1 (CC BY-NC-SA 3.0).
+
+Map tiles: © OpenStreetMap contributors (ODbL), via the standard OSM tile server.
 
 Barcelona traffic: © adsb.lol contributors, https://adsb.lol, made available under the [Open Database License 1.0](https://opendatacommons.org/licenses/odbl/1-0/).
 

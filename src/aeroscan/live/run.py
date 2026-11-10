@@ -80,6 +80,7 @@ def run(
         total += len(alerts)
         at = datetime.fromtimestamp(server_time, UTC)
         pipeline.detector.prune(at)
+        store.replace_positions(svs)
         store.add_poll(
             at, len(svs), len(alerts), pipeline.suppressed - before, client.credits_remaining
         )
