@@ -5,22 +5,22 @@
 | Metric | Value |
 | --- | --- |
 | 7700 flights | 435 |
-| Trajectory-only recall (all) | 24.4% |
-| Trajectory-only recall (diverted) | 56.1% |
-| Detected before the 7700 squawk | 26 |
-| Median lead time vs squawk | 161.0 s |
-| False alarms, normal part of 7700 flights | 16 in 271.0 h (0.059/h) |
-| False alarms, Dublin approaches | 95 of 8945 flights (1.06%) |
+| Trajectory-only recall (all) | 21.1% |
+| Trajectory-only recall (diverted) | 50.7% |
+| Detected before the 7700 squawk | 19 |
+| Median lead time vs squawk | 195.0 s |
+| False alarms, normal part of 7700 flights | 7 in 271.0 h (0.0258/h) |
+| False alarms, Dublin approaches | 78 of 8945 flights (0.87%) |
 | Squawk rule recall (squawk visible) | 99.1% |
 
 | Category | Flights | Detected | Recall |
 | --- | --- | --- | --- |
-| unlabelled | 226 | 10 | 4% |
-| unclear | 100 | 43 | 43% |
-| medical | 34 | 14 | 41% |
-| engine | 15 | 4 | 27% |
-| cabin_pressure | 14 | 10 | 71% |
-| technical | 10 | 3 | 30% |
+| unlabelled | 226 | 5 | 2% |
+| unclear | 100 | 39 | 39% |
+| medical | 34 | 13 | 38% |
+| engine | 15 | 3 | 20% |
+| cabin_pressure | 14 | 9 | 64% |
+| technical | 10 | 2 | 20% |
 | smoke_burn_smell_flames | 10 | 7 | 70% |
 | misc | 4 | 1 | 25% |
 | landing_gear | 4 | 3 | 75% |
@@ -33,7 +33,7 @@
 | air_condition | 1 | 1 | 100% |
 | hot_air_leak | 1 | 1 | 100% |
 | bomb_threat | 1 | 1 | 100% |
-| heating | 1 | 1 | 100% |
+| heating | 1 | 0 | 0% |
 | fuel_leak | 1 | 0 | 0% |
 | flaps | 1 | 0 | 0% |
 
@@ -42,27 +42,27 @@
 | Metric | Value |
 | --- | --- |
 | 7700 flights | 397 |
-| Trajectory-only recall (all) | 28.2% |
-| Trajectory-only recall (diverted) | 59.9% |
-| Detected before the 7700 squawk | 25 |
-| Median lead time vs squawk | 160.0 s |
-| False alarms, normal part of 7700 flights | 16 in 288.7 h (0.0554/h) |
-| False alarms, Dublin approaches | 87 of 8756 flights (0.99%) |
+| Trajectory-only recall (all) | 23.7% |
+| Trajectory-only recall (diverted) | 52.4% |
+| Detected before the 7700 squawk | 17 |
+| Median lead time vs squawk | 170.0 s |
+| False alarms, normal part of 7700 flights | 10 in 288.7 h (0.0346/h) |
+| False alarms, Dublin approaches | 73 of 8756 flights (0.83%) |
 | Squawk rule recall (squawk visible) | 100.0% |
 
 | Category | Flights | Detected | Recall |
 | --- | --- | --- | --- |
-| unlabelled | 186 | 10 | 5% |
-| unclear | 104 | 39 | 38% |
-| medical | 40 | 24 | 60% |
+| unlabelled | 186 | 7 | 4% |
+| unclear | 104 | 31 | 30% |
+| medical | 40 | 22 | 55% |
 | technical | 11 | 6 | 55% |
 | smoke_burn_smell_flames | 11 | 8 | 73% |
-| engine | 10 | 7 | 70% |
-| cabin_pressure | 9 | 8 | 89% |
+| engine | 10 | 5 | 50% |
+| cabin_pressure | 9 | 7 | 78% |
 | fuel_leak | 7 | 3 | 43% |
-| hydraulics | 4 | 1 | 25% |
+| hydraulics | 4 | 0 | 0% |
 | misc | 2 | 1 | 50% |
-| landing_gear | 2 | 1 | 50% |
+| landing_gear | 2 | 0 | 0% |
 | cracked_windshield | 2 | 1 | 50% |
 | maintenance | 1 | 0 | 0% |
 | door | 1 | 0 | 0% |
@@ -73,3 +73,18 @@
 | bird | 1 | 0 | 0% |
 | tyre | 1 | 1 | 100% |
 | operational_issue | 1 | 0 | 0% |
+
+## Barcelona traffic (adsb.lol, 12 days of 2025)
+
+| Metric | dev | test |
+| --- | --- | --- |
+| Flights | 18,696 | 18,696 |
+| Flight-hours in region | 9,528 | 9,675 |
+| Descents from cruise | 7,462 | 7,569 |
+| Flights with a false alarm | 87 | 110 |
+| False-alarm rate per flight | 0.47% | 0.59% |
+| False alarms per flight-hour | 0.0120 | 0.0129 |
+| `rapid_descent` alerts | 47 | 58 |
+| `turnback` alerts | 67 | 67 |
+
+Emergency squawks seen: 4 flights, 3 held on consecutive polls (excluded from false alarms), 0 of those also flagged by trajectory rules.

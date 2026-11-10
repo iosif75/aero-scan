@@ -62,7 +62,7 @@ class RapidDescent:
     instantaneous vertical rate, which is noisier and missing more often.
     """
 
-    threshold_fpm: float = -3500.0
+    threshold_fpm: float = -3750.0
     min_intervals: int = 2
     min_start_altitude_ft: float = 15_000.0
     name: str = "rapid_descent"
@@ -128,9 +128,14 @@ class Turnback:
     """Heading reversed and held, at altitude, without looping (holding).
 
     Typical of an aircraft returning to its origin or diverting behind itself.
-    Aircraft still climbing are excluded: many departure procedures take off
-    into the wind and reverse towards the destination during the climb, while a
-    genuine return usually levels off or descends.
+
+    Excluded, because they reverse direction routinely:
+    - aircraft still climbing (departures that take off into the wind and turn
+      towards the destination during the climb);
+    - aircraft seen below `departure_floor_ft` earlier in the window and well
+      above it now: the departure phase. Short legs out of Barcelona and Palma
+      reach cruise level during the reversal, so the climb test alone misses them;
+    - slow aircraft (below `min_groundspeed_kt`): light aircraft manoeuvre freely.
     """
 
     min_reversal_deg: float = 135.0
@@ -140,7 +145,18 @@ class Turnback:
     max_cumulative_turn_deg: float = 270.0
     max_climb_fpm: float = 1000.0
     climb_lookback_s: float = 4 * 60.0
+    departure_floor_ft: float = 5_000.0
+    departure_min_gain_ft: float = 5_000.0
+    min_groundspeed_kt: float = 220.0
     name: str = "turnback"
+
+    def _in_departure_phase(self, window: Sequence[StateVector]) -> bool:
+        alts = [s.altitude_ft for s in window if s.altitude_ft is not None]
+        if not alts:
+            return False
+        lowest = min(alts)
+        current = alts[-1]
+        return lowest <= self.departure_floor_ft and current - lowest >= self.departure_min_gain_ft
 
     def _recent_climb_fpm(self, window: Sequence[StateVector]) -> float | None:
         newest = window[-1]
@@ -162,6 +178,10 @@ class Turnback:
             return None
         if newest.altitude_ft < self.min_altitude_ft:
             return None
+        if newest.groundspeed_kt is not None and newest.groundspeed_kt < self.min_groundspeed_kt:
+            return None
+        if self._in_departure_phase(window):
+            return None
         profile = _turn_profile(window, self.lookback_s)
         if profile is None:
             return None
@@ -180,6 +200,9 @@ class Turnback:
         climb = self._recent_climb_fpm(window)
         if climb is None or climb > self.max_climb_fpm:
             return None
+        # The newest report may lack a track; describe the latest one that has it.
+        current_track = pts[-1].track_deg
+        assert current_track is not None
         return Alert(
             rule=self.name,
             severity=Severity.MEDIUM,
@@ -188,11 +211,11 @@ class Turnback:
             timestamp=newest.timestamp,
             summary=(
                 f"Track changed {deviations[-1]:.0f}° (from {first.track_deg:.0f}° "
-                f"to {newest.track_deg:.0f}°) at {newest.altitude_ft:,.0f} ft and held"
+                f"to {current_track:.0f}°) at {newest.altitude_ft:,.0f} ft and held"
             ),
             evidence={
                 "initial_track_deg": first.track_deg,
-                "current_track_deg": newest.track_deg or 0.0,
+                "current_track_deg": current_track,
                 "cumulative_turn_deg": round(cumulative),
                 "altitude_ft": newest.altitude_ft,
                 "recent_climb_fpm": round(climb),

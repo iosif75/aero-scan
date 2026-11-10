@@ -3,42 +3,42 @@
   "squawk7700": {
     "dev": {
       "flights": 435,
-      "recall_overall": 0.244,
-      "recall_diverted": 0.561,
+      "recall_overall": 0.211,
+      "recall_diverted": 0.507,
       "detected_by_rule": {
-        "turnback": 61,
-        "rapid_descent": 45
+        "turnback": 59,
+        "rapid_descent": 33
       },
-      "lead_time_median_s": 161.0,
-      "detected_before_squawk": 26,
+      "lead_time_median_s": 195.0,
+      "detected_before_squawk": 19,
       "pre_onset_flight_hours": 271.0,
-      "pre_onset_false_alarms": 16,
-      "false_alarms_per_flight_hour": 0.059,
+      "pre_onset_false_alarms": 7,
+      "false_alarms_per_flight_hour": 0.0258,
       "squawk_rule_recall": 0.991,
       "by_category": {
         "unlabelled": {
           "flights": 226,
-          "detected": 10
+          "detected": 5
         },
         "unclear": {
           "flights": 100,
-          "detected": 43
+          "detected": 39
         },
         "medical": {
           "flights": 34,
-          "detected": 14
+          "detected": 13
         },
         "engine": {
           "flights": 15,
-          "detected": 4
+          "detected": 3
         },
         "cabin_pressure": {
           "flights": 14,
-          "detected": 10
+          "detected": 9
         },
         "technical": {
           "flights": 10,
-          "detected": 3
+          "detected": 2
         },
         "smoke_burn_smell_flames": {
           "flights": 10,
@@ -90,7 +90,7 @@
         },
         "heating": {
           "flights": 1,
-          "detected": 1
+          "detected": 0
         },
         "fuel_leak": {
           "flights": 1,
@@ -104,30 +104,30 @@
     },
     "test": {
       "flights": 397,
-      "recall_overall": 0.282,
-      "recall_diverted": 0.599,
+      "recall_overall": 0.237,
+      "recall_diverted": 0.524,
       "detected_by_rule": {
-        "rapid_descent": 43,
-        "turnback": 69
+        "rapid_descent": 32,
+        "turnback": 62
       },
-      "lead_time_median_s": 160.0,
-      "detected_before_squawk": 25,
+      "lead_time_median_s": 170.0,
+      "detected_before_squawk": 17,
       "pre_onset_flight_hours": 288.7,
-      "pre_onset_false_alarms": 16,
-      "false_alarms_per_flight_hour": 0.0554,
+      "pre_onset_false_alarms": 10,
+      "false_alarms_per_flight_hour": 0.0346,
       "squawk_rule_recall": 1.0,
       "by_category": {
         "unlabelled": {
           "flights": 186,
-          "detected": 10
+          "detected": 7
         },
         "unclear": {
           "flights": 104,
-          "detected": 39
+          "detected": 31
         },
         "medical": {
           "flights": 40,
-          "detected": 24
+          "detected": 22
         },
         "technical": {
           "flights": 11,
@@ -139,11 +139,11 @@
         },
         "engine": {
           "flights": 10,
-          "detected": 7
+          "detected": 5
         },
         "cabin_pressure": {
           "flights": 9,
-          "detected": 8
+          "detected": 7
         },
         "fuel_leak": {
           "flights": 7,
@@ -151,7 +151,7 @@
         },
         "hydraulics": {
           "flights": 4,
-          "detected": 1
+          "detected": 0
         },
         "misc": {
           "flights": 2,
@@ -159,7 +159,7 @@
         },
         "landing_gear": {
           "flights": 2,
-          "detected": 1
+          "detected": 0
         },
         "cracked_windshield": {
           "flights": 2,
@@ -210,22 +210,68 @@
     "by_split": {
       "dev": {
         "flights": 8945,
-        "flights_with_false_alarm": 95,
-        "false_alarm_rate": 0.0106,
+        "flights_with_false_alarm": 78,
+        "false_alarm_rate": 0.0087,
         "by_rule": {
-          "rapid_descent": 18,
-          "turnback": 77
+          "rapid_descent": 8,
+          "turnback": 70
         }
       },
       "test": {
         "flights": 8756,
-        "flights_with_false_alarm": 87,
-        "false_alarm_rate": 0.0099,
+        "flights_with_false_alarm": 73,
+        "false_alarm_rate": 0.0083,
         "by_rule": {
-          "turnback": 71,
-          "rapid_descent": 16
+          "turnback": 66,
+          "rapid_descent": 7
         }
       }
+    }
+  },
+  "bcn": {
+    "region": "bcn",
+    "days": [
+      "2025-01-15",
+      "2025-02-08",
+      "2025-03-19",
+      "2025-04-12",
+      "2025-05-21",
+      "2025-06-14",
+      "2025-07-16",
+      "2025-08-09",
+      "2025-09-17",
+      "2025-10-11",
+      "2025-11-19",
+      "2025-12-13"
+    ],
+    "dev": {
+      "flights": 18696,
+      "flight_hours": 9528.0,
+      "descents_from_cruise": 7462,
+      "flights_with_false_alarm": 87,
+      "false_alarm_rate_per_flight": 0.0047,
+      "false_alarms_per_flight_hour": 0.012,
+      "by_rule": {
+        "turnback": 67,
+        "rapid_descent": 47
+      }
+    },
+    "test": {
+      "flights": 18696,
+      "flight_hours": 9674.9,
+      "descents_from_cruise": 7569,
+      "flights_with_false_alarm": 110,
+      "false_alarm_rate_per_flight": 0.0059,
+      "false_alarms_per_flight_hour": 0.0129,
+      "by_rule": {
+        "turnback": 67,
+        "rapid_descent": 58
+      }
+    },
+    "emergency_squawks": {
+      "flights_with_emergency_squawk": 4,
+      "persistent": 3,
+      "flagged_by_trajectory": 0
     }
   }
 }

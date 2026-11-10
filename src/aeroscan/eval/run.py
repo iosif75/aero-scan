@@ -141,6 +141,80 @@ def evaluate_dublin(interval_s: int, limit: int | None = None) -> dict[str, Any]
     }
 
 
+@dataclass
+class _RegionStats:
+    flights: int = 0
+    hours: float = 0.0
+    flagged: int = 0
+    cruise_descents: int = 0
+    alerts: Counter[str] = field(default_factory=Counter)
+
+    def summary(self) -> dict[str, Any]:
+        total = sum(self.alerts.values())
+        return {
+            "flights": self.flights,
+            "flight_hours": round(self.hours, 1),
+            "descents_from_cruise": self.cruise_descents,
+            "flights_with_false_alarm": self.flagged,
+            "false_alarm_rate_per_flight": round(self.flagged / self.flights, 4)
+            if self.flights
+            else None,
+            "false_alarms_per_flight_hour": round(total / self.hours, 4) if self.hours else None,
+            "by_rule": dict(self.alerts),
+        }
+
+
+def evaluate_region(interval_s: int, limit: int | None = None) -> dict[str, Any]:
+    """False alarms on ordinary traffic in the Barcelona box (adsb.lol, 12 days of 2025).
+
+    Every MEDIUM+ trajectory alert counts as a false alarm, except on flights that
+    also held an emergency squawk on consecutive polls: those may be genuine and
+    are reported separately. The rate is therefore an upper bound.
+    """
+    from .adsblol import BARCELONA, DEFAULT_DAYS_2025, load_region
+
+    df = load_region(DEFAULT_DAYS_2025, BARCELONA)
+    stats = {s: _RegionStats() for s in ("dev", "test")}
+    emergencies = {"flights_with_emergency_squawk": 0, "persistent": 0, "flagged_by_trajectory": 0}
+    for i, (fid, g) in enumerate(df.groupby("flight_id", sort=True)):
+        if limit is not None and i >= limit:
+            break
+        if len(g) < 5:
+            continue
+        duration_h = (g["timestamp"].max() - g["timestamp"].min()).total_seconds() / 3600
+        if duration_h < 5 / 60:
+            continue
+        polled = poll_resample(g, interval_s)
+        alerts = _significant(
+            Detector(rules=trajectory_rules()).update_many(
+                to_state_vectors(polled, hide_squawk=True)
+            )
+        )
+        raw_emergency = g["squawk"].isin(["7500", "7600", "7700"]).any()
+        persistent = bool(
+            raw_emergency
+            and Detector(rules=[EmergencySquawk()]).update_many(to_state_vectors(polled))
+        )
+        if raw_emergency:
+            emergencies["flights_with_emergency_squawk"] += 1
+            emergencies["persistent"] += persistent
+            emergencies["flagged_by_trajectory"] += bool(persistent and alerts)
+        if persistent:
+            continue
+        s = stats[split_of(str(fid))]
+        s.flights += 1
+        s.hours += duration_h
+        s.cruise_descents += bool(g["altitude"].max() >= 25_000 and g["altitude"].min() <= 5_000)
+        if alerts:
+            s.flagged += 1
+            s.alerts.update(a.rule for a in alerts)
+    out: dict[str, Any] = {"region": BARCELONA.name, "days": [str(d) for d in DEFAULT_DAYS_2025]}
+    for split, s in stats.items():
+        out[split] = s.summary()
+    out["emergency_squawks"] = emergencies
+    return out
+
+
 def summarise(results: list[FlightResult], split: str) -> dict[str, Any]:
     rs = [r for r in results if r.split == split]
     if not rs:
@@ -206,6 +280,39 @@ def to_markdown(report: dict[str, Any]) -> str:
                 f"| {cat} | {c['flights']} | {c['detected']} | {c['detected'] / c['flights']:.0%} |"
             )
         lines.append("")
+    bcn = report.get("bcn")
+    if bcn:
+        lines += [
+            "## Barcelona traffic (adsb.lol, 12 days of 2025)",
+            "",
+            "| Metric | dev | test |",
+            "| --- | --- | --- |",
+        ]
+        rows = [
+            ("Flights", "flights", "{:,}"),
+            ("Flight-hours in region", "flight_hours", "{:,.0f}"),
+            ("Descents from cruise", "descents_from_cruise", "{:,}"),
+            ("Flights with a false alarm", "flights_with_false_alarm", "{:,}"),
+            ("False-alarm rate per flight", "false_alarm_rate_per_flight", "{:.2%}"),
+            ("False alarms per flight-hour", "false_alarms_per_flight_hour", "{:.4f}"),
+        ]
+        for label, key, fmt in rows:
+            lines.append(
+                f"| {label} | {fmt.format(bcn['dev'][key])} | {fmt.format(bcn['test'][key])} |"
+            )
+        for rule in sorted(set(bcn["dev"]["by_rule"]) | set(bcn["test"]["by_rule"])):
+            lines.append(
+                f"| `{rule}` alerts | {bcn['dev']['by_rule'].get(rule, 0)} | "
+                f"{bcn['test']['by_rule'].get(rule, 0)} |"
+            )
+        e = bcn["emergency_squawks"]
+        lines += [
+            "",
+            f"Emergency squawks seen: {e['flights_with_emergency_squawk']} flights, "
+            f"{e['persistent']} held on consecutive polls (excluded from false alarms), "
+            f"{e['flagged_by_trajectory']} of those also flagged by trajectory rules.",
+            "",
+        ]
     return "\n".join(lines)
 
 
@@ -214,6 +321,7 @@ def main(argv: list[str] | None = None) -> None:
     p.add_argument("--interval", type=int, default=60, help="polling interval in seconds")
     p.add_argument("--limit", type=int, default=None, help="max flights per dataset (smoke test)")
     p.add_argument("--skip-dublin", action="store_true")
+    p.add_argument("--skip-bcn", action="store_true", help="skip the Barcelona adsb.lol evaluation")
     p.add_argument("--out", type=Path, default=Path("eval/results"))
     args = p.parse_args(argv)
 
@@ -222,6 +330,7 @@ def main(argv: list[str] | None = None) -> None:
         "interval_s": args.interval,
         "squawk7700": {s: summarise(results, s) for s in ("dev", "test")},
         "dublin": None if args.skip_dublin else evaluate_dublin(args.interval, args.limit),
+        "bcn": None if args.skip_bcn else evaluate_region(args.interval, args.limit),
     }
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "report.json").write_text(json.dumps(report, indent=2, default=str))

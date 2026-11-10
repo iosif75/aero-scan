@@ -48,7 +48,8 @@ def _str(v: object) -> str | None:
 
 def to_state_vectors(df: pd.DataFrame, hide_squawk: bool = False) -> Iterator[StateVector]:
     """Rows in the traffic-library schema (feet, knots, ft/min) to StateVectors."""
-    ts: list[datetime] = [t.to_pydatetime() for t in df["timestamp"]]
+    # Python datetimes hold microseconds; some sources (adsb.lol) carry nanoseconds.
+    ts: list[datetime] = [t.to_pydatetime() for t in df["timestamp"].dt.floor("us")]
     cols = {
         c: df[c].astype(float).to_numpy()
         for c in ("latitude", "longitude", "altitude", "groundspeed", "track", "vertical_rate")
@@ -56,6 +57,11 @@ def to_state_vectors(df: pd.DataFrame, hide_squawk: bool = False) -> Iterator[St
     icao = df["icao24"].astype(str).to_list()
     callsign = df["callsign"].to_list()
     squawk = df["squawk"].to_list()
+    ground = (
+        df["on_ground"].fillna(False).astype(bool).to_list()
+        if "on_ground" in df.columns
+        else [False] * len(df)
+    )
     for i, t in enumerate(ts):
         yield StateVector(
             timestamp=t,
@@ -68,6 +74,7 @@ def to_state_vectors(df: pd.DataFrame, hide_squawk: bool = False) -> Iterator[St
             track_deg=_opt(cols["track"][i]),
             vertical_rate_fpm=_opt(cols["vertical_rate"][i]),
             squawk=None if hide_squawk else _str(squawk[i]),
+            on_ground=ground[i],
         )
 
 

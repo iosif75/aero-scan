@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 from helpers import track
 
@@ -81,6 +83,17 @@ class TestTurnback:
         tracks = [270, 270, 270, 230, 180, 120, 90, 90]
         assert self.rule.evaluate(track([float(a) for a in alts], tracks)) is not None
 
+    def test_ignores_reversal_in_departure_phase_even_when_level(self) -> None:
+        # Off the runway eastbound, now level at FL230 heading west: a short-haul departure.
+        alts = [3_000, 9_000, 15_000, 20_000, 23_000, 23_000, 23_000, 23_000]
+        tracks = [70, 70, 90, 150, 220, 260, 265, 265]
+        assert self.rule.evaluate(track([float(a) for a in alts], tracks)) is None
+
+    def test_ignores_slow_aircraft(self) -> None:
+        tracks = [90, 90, 90, 130, 180, 240, 270, 270]
+        svs = [replace(sv, groundspeed_kt=150.0) for sv in track([12_000.0] * 8, tracks)]
+        assert self.rule.evaluate(svs) is None
+
     def test_holding_is_not_a_turnback(self) -> None:
         tracks = [0, 90, 180, 270, 0, 90, 180, 270, 0]
         assert self.rule.evaluate(track([12_000.0] * 9, tracks)) is None
@@ -120,3 +133,11 @@ class TestEmergencySquawk:
 
     def test_code_change_between_emergencies_resets(self) -> None:
         assert self.rule.evaluate(track([35_000] * 2, squawks=["7600", "7700"])) is None
+
+
+def test_turnback_tolerates_newest_report_without_track() -> None:
+    svs = track([35_000.0] * 9, [90, 90, 90, 130, 180, 240, 270, 270, 270])
+    svs[-1] = replace(svs[-1], track_deg=None)
+    alert = Turnback().evaluate(svs)
+    assert alert is not None
+    assert alert.evidence["current_track_deg"] == 270
