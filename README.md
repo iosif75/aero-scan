@@ -59,6 +59,25 @@ Full output, including the dev split: [`eval/results/report.md`](eval/results/re
 - Ground truth for emergencies is "squawked 7700", so 7700 onset is the reference time. Some emergencies start earlier, which is why alerts up to 10 minutes before onset count as detections.
 - The Barcelona false-alarm count is an upper bound: an alert on an ordinary day may occasionally be a real, unreported event.
 
+## Alert triage (milestone 2, in progress)
+
+The rules above are tuned to keep false alarms down, which costs detections. The alternative being tested: run **looser** rules and put a learned triage step behind them that sorts each alert into *real* or *routine*, plus a likely cause.
+
+Training data comes from every alert of the loose rules (`aeroscan/triage/dataset.py`): 153 real and 2,952 routine alerts in dev, 159 and 2,995 in test. The model sees only the 15 minutes of polls before the alert, with no position, callsign, date or absolute heading, and every value rounded, so it can't learn which dataset an example came from instead of what the aircraft did.
+
+The bar any model has to beat is a gradient-boosted tree baseline on the same inputs (`aeroscan/triage/baseline.py`, test split):
+
+| Metric | Baseline |
+| --- | --- |
+| ROC-AUC, real vs routine | 0.975 |
+| ROC-AUC, same-source only (real vs the normal part of the same 7700 flights) | 0.889 |
+| Routine alerts kept while keeping 80% of real ones | 53 of 2,995 (Barcelona: 40) |
+| Cause accuracy, known causes | 8% (always answering "unknown" scores 45%) |
+
+The same-source score is the honest one: both sides come from the same dataset, so it can't be inflated by recognising the source. The cause result is a negative finding: movement alone, with about 80 labelled examples, does not tell an engine problem from a medical one.
+
+Next: a LoRA fine-tune of a small instruction model on the same examples (`aeroscan/triage/train.py`), scored on the same metrics.
+
 ## Evaluation method
 
 - **Data.**
