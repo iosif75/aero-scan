@@ -1,0 +1,34 @@
+{
+  "test_alerts": 3154,
+  "test_real": 159,
+  "training_examples": 903,
+  "note": "Both models trained on the same 903 dev examples (all 127 real outside the validation flights, source-stratified routine sample); scored on the full test split.",
+  "gradient_boosting": {
+    "roc_auc": 0.971,
+    "average_precision": 0.756,
+    "roc_auc_same_source": 0.877,
+    "routine_kept_at_recall_80": 70,
+    "bcn_kept_at_recall_80": 54
+  },
+  "gradient_boosting_all_dev": {
+    "training_examples": 3105,
+    "roc_auc": 0.975,
+    "average_precision": 0.813,
+    "roc_auc_same_source": 0.889,
+    "routine_kept_at_recall_80": 53,
+    "bcn_kept_at_recall_80": 40,
+    "cause_accuracy_known": 0.08
+  },
+  "qwen2.5_1.5b_instruct_lora": {
+    "hardware": "RTX 4070 Ti SUPER, LoRA r=16, 3 epochs, lr 2e-4",
+    "roc_auc": 0.949,
+    "average_precision": 0.514,
+    "roc_auc_same_source": 0.855,
+    "routine_kept_at_recall_90": 287,
+    "routine_kept_at_recall_80": 138,
+    "bcn_kept_at_recall_80": 103,
+    "routine_kept_at_recall_70": 109,
+    "cause_accuracy": 0.063,
+    "cause_accuracy_known": 0.115
+  }
+}
