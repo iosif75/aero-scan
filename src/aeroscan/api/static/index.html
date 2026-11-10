@@ -1,155 +1,100 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Aero-Scan · Barcelona</title>
+<title>aeroscan - bcn</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <style>
-  :root {
-    --bg: #0f1419; --panel: #161c23; --line: #26303b; --text: #e6e9ec; --muted: #8b97a3;
-    --plane: #7cc4ff; --high: #ff5d5d; --medium: #ffb547; --info: #8b97a3;
-    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  }
-  * { box-sizing: border-box; }
-  body { margin: 0; height: 100vh; display: grid; grid-template-columns: 1fr 360px; background: var(--bg); color: var(--text); }
-  #map { height: 100vh; background: #0b0f13; }
-  aside { border-left: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
-  header { padding: 18px 20px 14px; border-bottom: 1px solid var(--line); }
-  h1 { margin: 0; font-size: 17px; letter-spacing: .02em; }
-  .sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
-  .status { display: inline-flex; align-items: center; gap: 6px; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
-  .dot.ok { background: #3ddc84; } .dot.stale { background: var(--medium); }
-  .stats { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--line); }
-  .stat { padding: 12px 20px; border-right: 1px solid var(--line); }
-  .stat:last-child { border-right: 0; }
-  .stat b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
-  .stat span { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
-  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 16px 20px 8px; }
-  #alerts { list-style: none; margin: 0; padding: 0 12px 16px; overflow-y: auto; flex: 1; }
-  #alerts li { padding: 10px 10px 10px 12px; border-left: 3px solid var(--info); border-radius: 4px; margin-bottom: 6px; background: #1b222b; cursor: pointer; }
-  #alerts li:hover { background: #212a34; }
-  #alerts li.HIGH { border-left-color: var(--high); } #alerts li.MEDIUM { border-left-color: var(--medium); }
-  .row { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
-  .row .cs { font-weight: 600; } .row time { color: var(--muted); font-variant-numeric: tabular-nums; }
-  .summary { color: var(--muted); font-size: 12px; margin-top: 3px; line-height: 1.35; }
-  .empty { color: var(--muted); font-size: 13px; padding: 4px 8px; }
-  /* Dark basemap from standard OSM tiles. */
-  .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.85) contrast(.9) saturate(.6); }
-  .plane { width: 22px; height: 22px; fill: var(--plane); filter: drop-shadow(0 0 2px #000); }
-  .plane.alerted { width: 30px; height: 30px; fill: var(--high); }
-  .leaflet-popup-content { font-size: 13px; line-height: 1.5; }
-  footer { border-top: 1px solid var(--line); padding: 10px 20px; color: var(--muted); font-size: 11px; }
-  footer a { color: var(--muted); }
-  @media (max-width: 800px) { body { grid-template-columns: 1fr; grid-template-rows: 55vh 45vh; } #map { height: 55vh; } aside { border-left: 0; border-top: 1px solid var(--line); } }
+body { font-family: monospace; margin: 8px; }
+#map { height: 450px; border: 1px solid black; }
+table { border-collapse: collapse; }
+td, th { border: 1px solid gray; padding: 2px 6px; text-align: left; }
+.HIGH { color: red; }
+.MEDIUM { color: #c60; }
 </style>
 </head>
 <body>
+<h2>aeroscan - barcelona</h2>
+<pre id="status">loading...</pre>
 <div id="map"></div>
-<aside>
-  <header>
-    <h1>Aero-Scan · Barcelona</h1>
-    <div class="sub"><span class="status"><span id="dot" class="dot"></span><span id="status">Connecting…</span></span> · <span id="mode"></span></div>
-  </header>
-  <div class="stats">
-    <div class="stat"><b id="s-aircraft">–</b><span>Aircraft</span></div>
-    <div class="stat"><b id="s-alerts">–</b><span>Alerts 24 h</span></div>
-    <div class="stat"><b id="s-suppressed">–</b><span>Filtered</span></div>
-  </div>
-  <h2>Recent alerts</h2>
-  <ul id="alerts"><li class="empty">No alerts yet.</li></ul>
-  <footer>Data: <a href="https://opensky-network.org">The OpenSky Network</a> · <a href="/docs">API docs</a></footer>
-</aside>
+<h3>alerts (last 30)</h3>
+<table>
+<thead><tr><th>time</th><th>aircraft</th><th>rule</th><th>sev</th><th>summary</th><th>p_real</th></tr></thead>
+<tbody id="alerts"></tbody>
+</table>
+<p><a href="/docs">api docs</a> | data from <a href="https://opensky-network.org">opensky network</a></p>
 <script>
-"use strict";
-const map = L.map("map", { zoomControl: true }).setView([41.3, 2.5], 7);
+var map = L.map("map").setView([41.3, 2.5], 7);
 L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom: 18,
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 }).addTo(map);
-// The monitored box.
-L.rectangle([[39.3, 0.0], [43.3, 5.0]], { color: "#7cc4ff", weight: 1, fill: false, dashArray: "4 6" }).addTo(map);
+L.rectangle([[39.3, 0.0], [43.3, 5.0]], { color: "black", weight: 1, fill: false }).addTo(map);
+var planes = L.layerGroup().addTo(map);
+var markers = {};
 
-const layer = L.layerGroup().addTo(map);
-const markers = new Map();
-const text = (tag, value, cls) => { const el = document.createElement(tag); el.textContent = value; if (cls) el.className = cls; return el; };
-const fmt = (v, unit, digits = 0) => v == null ? "–" : `${Number(v).toLocaleString("en", { maximumFractionDigits: digits })} ${unit}`;
-const hhmm = iso => new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-function popup(a) {
-  const box = document.createElement("div");
-  box.append(text("b", a.callsign || a.icao24), document.createElement("br"));
-  box.append(text("span", `${fmt(a.altitude_ft, "ft")} · ${fmt(a.groundspeed_kt, "kt")} · ${fmt(a.vertical_rate_fpm, "ft/min")}`), document.createElement("br"));
-  box.append(text("span", `Squawk ${a.squawk || "–"} · ${a.icao24}`));
-  return box;
+function cell(tr, value, cls) {
+  var td = document.createElement("td");
+  td.textContent = value;  // never innerHTML: callsigns and summaries come from outside
+  if (cls) td.className = cls;
+  tr.appendChild(td);
 }
 
-function drawAircraft(list) {
-  const seen = new Set();
-  for (const a of list) {
-    seen.add(a.icao24);
-    const size = a.alerted ? 30 : 22;
-    // SVG plane pointing north, rotated by the true track (degrees clockwise from north).
-    const icon = L.divIcon({
-      className: "", iconSize: [size, size], iconAnchor: [size / 2, size / 2],
-      html: `<svg class="plane${a.alerted ? " alerted" : ""}" viewBox="0 0 24 24" style="transform: rotate(${Number(a.track_deg) || 0}deg)">`
-        + `<path d="M12 2c.8 0 1.4.9 1.4 2v5.2l7.6 4.5v2l-7.6-2.2v4.3l2.2 1.6V21L12 20l-3.6 1v-1.6l2.2-1.6v-4.3L3 15.7v-2l7.6-4.5V4c0-1.1.6-2 1.4-2z"/></svg>`,
-    });
-    let m = markers.get(a.icao24);
-    if (!m) { m = L.marker([a.latitude, a.longitude], { icon }).addTo(layer); markers.set(a.icao24, m); }
-    else { m.setLatLng([a.latitude, a.longitude]); m.setIcon(icon); }
-    m.bindPopup(popup(a));
-  }
-  for (const [id, m] of markers) if (!seen.has(id)) { layer.removeLayer(m); markers.delete(id); }
-}
+function n(v) { return v == null ? "-" : Math.round(v); }
 
-function drawAlerts(list) {
-  const ul = document.getElementById("alerts");
-  ul.replaceChildren();
-  if (!list.length) { ul.append(text("li", "No alerts yet.", "empty")); return; }
-  for (const a of list) {
-    const li = document.createElement("li");
-    li.className = a.severity;
-    const row = document.createElement("div");
-    row.className = "row";
-    row.append(text("span", `${a.callsign || a.icao24} · ${a.rule.replace("_", " ")}`, "cs"), text("time", hhmm(a.detected_at)));
-    li.append(row, text("div", a.summary + (a.p_real != null ? ` · triage ${Math.round(a.p_real * 100)}%` : ""), "summary"));
-    li.onclick = () => { const m = markers.get(a.icao24); if (m) { map.setView(m.getLatLng(), 9); m.openPopup(); } };
-    ul.append(li);
-  }
-}
-
-async function getJSON(path) {
-  const r = await fetch(path);
-  if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
-  return r.json();
-}
-
-async function refresh() {
-  try {
-    const [health, stats, aircraft, alerts] = await Promise.all([
-      getJSON("/api/v1/health"), getJSON("/api/v1/stats"), getJSON("/api/v1/aircraft"), getJSON("/api/v1/alerts?limit=30"),
-    ]);
-    document.getElementById("dot").className = `dot ${health.status}`;
+function update() {
+  Promise.all([
+    fetch("/api/v1/stats").then(function (r) { return r.json(); }),
+    fetch("/api/v1/aircraft").then(function (r) { return r.json(); }),
+    fetch("/api/v1/alerts?limit=30").then(function (r) { return r.json(); })
+  ]).then(function (res) {
+    var s = res[0], aircraft = res[1], alerts = res[2];
     document.getElementById("status").textContent =
-      health.status === "ok" ? `Live · last poll ${hhmm(health.last_poll_at)}` : health.status === "stale" ? "Monitor not polling" : "No data yet";
-    document.getElementById("mode").textContent = stats.mode || "";
-    document.getElementById("s-aircraft").textContent = stats.aircraft_now;
-    document.getElementById("s-alerts").textContent = stats.alerts_last_24h;
-    document.getElementById("s-suppressed").textContent = stats.suppressed_total;
-    drawAircraft(aircraft);
-    drawAlerts(alerts);
-  } catch (e) {
-    document.getElementById("dot").className = "dot";
-    document.getElementById("status").textContent = "API unreachable";
-  }
+      "last poll: " + (s.last_poll_at || "never") + "   aircraft: " + s.aircraft_now +
+      "   alerts 24h: " + s.alerts_last_24h + "   filtered: " + s.suppressed_total +
+      "   mode: " + s.mode + "   credits: " + (s.credits_remaining == null ? "?" : s.credits_remaining);
+
+    planes.clearLayers();
+    markers = {};
+    aircraft.forEach(function (a) {
+      var m = L.circleMarker([a.latitude, a.longitude], {
+        radius: a.alerted ? 7 : 4, color: a.alerted ? "red" : "blue", weight: 1, fillOpacity: 0.8
+      }).addTo(planes);
+      var p = document.createElement("pre");  // text, not HTML
+      p.textContent = (a.callsign || a.icao24) + "\n" + n(a.altitude_ft) + " ft, " + n(a.groundspeed_kt) +
+        " kt, " + n(a.vertical_rate_fpm) + " ft/min, sq " + (a.squawk || "-");
+      m.bindPopup(p);
+      markers[a.icao24] = m;
+    });
+
+    var tbody = document.getElementById("alerts");
+    tbody.innerHTML = "";
+    if (alerts.length === 0) {
+      var tr = document.createElement("tr");
+      cell(tr, "no alerts");
+      tbody.appendChild(tr);
+    }
+    alerts.forEach(function (a) {
+      var tr = document.createElement("tr");
+      cell(tr, a.detected_at.replace("T", " ").slice(0, 19));
+      cell(tr, a.callsign || a.icao24);
+      cell(tr, a.rule);
+      cell(tr, a.severity, a.severity);
+      cell(tr, a.summary);
+      cell(tr, a.p_real == null ? "" : a.p_real.toFixed(2));
+      tr.onclick = function () { if (markers[a.icao24]) markers[a.icao24].openPopup(); };
+      tbody.appendChild(tr);
+    });
+  }).catch(function (e) {
+    document.getElementById("status").textContent = "error: " + e;
+  });
 }
-refresh();
-setInterval(refresh, 15000);
+
+update();
+setInterval(update, 15000);
 </script>
 </body>
 </html>

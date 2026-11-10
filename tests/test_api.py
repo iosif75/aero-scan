@@ -110,5 +110,15 @@ def test_api_never_writes(db: Path, client: TestClient) -> None:
 
 def test_map_page_and_docs(client: TestClient) -> None:
     page = client.get("/")
-    assert page.status_code == 200 and "Aero-Scan" in page.text
+    assert page.status_code == 200 and "aeroscan" in page.text
     assert client.get("/openapi.json").json()["info"]["title"] == "Aero-Scan API"
+
+
+def test_old_database_without_meta_table(db: Path) -> None:
+    conn = sqlite3.connect(db)
+    conn.execute("DROP TABLE meta")
+    conn.commit()
+    conn.close()
+    c = TestClient(create_app(db))
+    assert c.get("/api/v1/stats").json()["mode"] is None
+    assert c.get("/api/v1/health").json()["status"] == "ok"

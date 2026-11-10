@@ -101,7 +101,10 @@ def create_app(db_path: Path | str) -> FastAPI:
             conn.close()
 
     def meta(conn: sqlite3.Connection) -> dict[str, str]:
-        return {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM meta")}
+        try:
+            return {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM meta")}
+        except sqlite3.OperationalError:  # database from a version without the meta table
+            return {}
 
     def alert_out(r: sqlite3.Row) -> AlertOut:
         return AlertOut(**{**dict(r), "evidence": json.loads(r["evidence"])})
