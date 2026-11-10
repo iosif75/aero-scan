@@ -1,6 +1,6 @@
 # Aero-Scan
 
-Flight anomaly detection on open ADS-B data, centred on Barcelona–El Prat. **Deterministic rules decide; a local LLM explains** (LLM stage: milestone 2).
+Flight anomaly detection on open ADS-B data, centred on Barcelona–El Prat. **Deterministic rules flag; a learned triage model filters.** A fine-tuned small LLM was tested for the triage step and lost to gradient-boosted trees (see [Alert triage](#alert-triage-milestone-2)).
 
 The detector watches each aircraft as a once-a-minute poller would see it (the budget of a free [OpenSky](https://opensky-network.org) account) and flags emergency transponder codes, rapid descents from altitude, turnbacks and holding. Every rule is a pure function of a short window of position reports, so it is unit-tested, deterministic, and identical live and in evaluation.
 
