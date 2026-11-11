@@ -87,7 +87,7 @@ Recall by reported problem (categories with ≥ 9 flights):
 | Dublin approaches, 2019 | 73 of 8,756 flights (0.83%) |
 | Normal part of the 7700 flights | 10 alerts in 289 flight-hours |
 
-In operational terms, the Barcelona region sees about 3,100 flights a day, so **about 18 flights a day would be flagged in error**. That is the number to bring down: milestone 2 puts an LLM triage step behind the rules, and its evaluation must show it cuts these without losing detections.
+In operational terms, the Barcelona region sees about 3,100 flights a day, so **about 18 flights a day would be flagged in error**. That is the number to bring down: the [triage step](#alert-triage-milestone-2) behind looser rules cuts it to about 8 a day while catching more emergencies.
 
 Emergency squawks seen in the 12 Barcelona days: 4 flights. Three held the code long enough to be reported by the squawk rule (two 7600 radio failures, one 7700) and are excluded from the false alarms; none showed a trajectory anomaly. The fourth was a 7700 lasting about a second, which the persistence filter correctly ignored.
 
