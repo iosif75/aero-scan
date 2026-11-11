@@ -104,14 +104,14 @@
     },
     "test": {
       "flights": 397,
-      "recall_overall": 0.237,
+      "recall_overall": 0.234,
       "recall_diverted": 0.524,
       "detected_by_rule": {
         "rapid_descent": 32,
-        "turnback": 62
+        "turnback": 61
       },
-      "lead_time_median_s": 170.0,
-      "detected_before_squawk": 17,
+      "lead_time_median_s": 164.0,
+      "detected_before_squawk": 16,
       "pre_onset_flight_hours": 288.7,
       "pre_onset_false_alarms": 10,
       "false_alarms_per_flight_hour": 0.0346,
@@ -123,7 +123,7 @@
         },
         "unclear": {
           "flights": 104,
-          "detected": 31
+          "detected": 30
         },
         "medical": {
           "flights": 40,
@@ -210,19 +210,19 @@
     "by_split": {
       "dev": {
         "flights": 8945,
-        "flights_with_false_alarm": 78,
-        "false_alarm_rate": 0.0087,
+        "flights_with_false_alarm": 35,
+        "false_alarm_rate": 0.0039,
         "by_rule": {
           "rapid_descent": 8,
-          "turnback": 70
+          "turnback": 27
         }
       },
       "test": {
         "flights": 8756,
-        "flights_with_false_alarm": 73,
-        "false_alarm_rate": 0.0083,
+        "flights_with_false_alarm": 30,
+        "false_alarm_rate": 0.0034,
         "by_rule": {
-          "turnback": 66,
+          "turnback": 23,
           "rapid_descent": 7
         }
       }
@@ -248,11 +248,11 @@
       "flights": 18696,
       "flight_hours": 9528.0,
       "descents_from_cruise": 7462,
-      "flights_with_false_alarm": 87,
-      "false_alarm_rate_per_flight": 0.0047,
-      "false_alarms_per_flight_hour": 0.012,
+      "flights_with_false_alarm": 85,
+      "false_alarm_rate_per_flight": 0.0045,
+      "false_alarms_per_flight_hour": 0.0116,
       "by_rule": {
-        "turnback": 67,
+        "turnback": 64,
         "rapid_descent": 47
       }
     },
@@ -260,11 +260,11 @@
       "flights": 18696,
       "flight_hours": 9674.9,
       "descents_from_cruise": 7569,
-      "flights_with_false_alarm": 110,
-      "false_alarm_rate_per_flight": 0.0059,
-      "false_alarms_per_flight_hour": 0.0129,
+      "flights_with_false_alarm": 101,
+      "false_alarm_rate_per_flight": 0.0054,
+      "false_alarms_per_flight_hour": 0.012,
       "by_rule": {
-        "turnback": 67,
+        "turnback": 58,
         "rapid_descent": 58
       }
     },

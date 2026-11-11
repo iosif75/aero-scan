@@ -17,6 +17,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
+from .airports import Airport, bearing_deg, nearest_airport
 from .models import EMERGENCY_SQUAWKS, Alert, Severity, StateVector
 
 # Interval-averaged climb/descent rates beyond this are treated as data glitches
@@ -135,7 +136,20 @@ class Turnback:
     - aircraft seen below `departure_floor_ft` earlier in the window and well
       above it now: the departure phase. Short legs out of Barcelona and Palma
       reach cruise level during the reversal, so the climb test alone misses them;
-    - slow aircraft (below `min_groundspeed_kt`): light aircraft manoeuvre freely.
+    - slow aircraft (below `min_groundspeed_kt`): light aircraft manoeuvre freely;
+    - terminal-area manoeuvres, judged from the nearest airport, if it is within
+      `airport_radius_nm`:
+      - approach vectoring: below `terminal_ceiling_ft`, having flown towards the
+        airport (track within `approach_inbound_deg` of the bearing to it) and now
+        flying away from it (at least `approach_outbound_deg` off): a downwind leg
+        or a sequencing vector;
+      - departure: the lowest report in the window was at or below
+        `departure_airport_ceiling_ft` near an airport, and the aircraft is still
+        climbing at `departure_min_climb_fpm` or more: a slow climb-out turning
+        on course, which the departure-phase test above misses.
+
+    `airports` defaults to the bundled list; an empty list turns the
+    terminal-area tests off.
     """
 
     min_reversal_deg: float = 135.0
@@ -148,7 +162,48 @@ class Turnback:
     departure_floor_ft: float = 5_000.0
     departure_min_gain_ft: float = 5_000.0
     min_groundspeed_kt: float = 220.0
+    airport_radius_nm: float = 40.0
+    terminal_ceiling_ft: float = 18_000.0
+    approach_inbound_deg: float = 60.0
+    approach_outbound_deg: float = 120.0
+    departure_airport_ceiling_ft: float = 10_000.0
+    departure_min_climb_fpm: float = 500.0
+    airports: Sequence[Airport] | None = None
     name: str = "turnback"
+
+    def _near_airport(self, sv: StateVector) -> Airport | None:
+        found = nearest_airport(sv.latitude, sv.longitude, self.airports)
+        return found[0] if found is not None and found[1] <= self.airport_radius_nm else None
+
+    def _terminal_manoeuvre(
+        self, window: Sequence[StateVector], first: StateVector, track: float, climb: float
+    ) -> str | None:
+        """Which routine terminal-area manoeuvre this reversal looks like, if any."""
+        newest = window[-1]
+        alts = [s for s in window if s.altitude_ft is not None]
+        assert newest.altitude_ft is not None and first.track_deg is not None and alts
+        lowest = min(alts, key=lambda s: s.altitude_ft or 0.0)
+        assert lowest.altitude_ft is not None
+        if (
+            lowest.altitude_ft <= self.departure_airport_ceiling_ft
+            and newest.altitude_ft - lowest.altitude_ft >= 3_000.0
+            and climb >= self.departure_min_climb_fpm
+            and self._near_airport(lowest) is not None
+        ):
+            return "departure"
+        if newest.altitude_ft > self.terminal_ceiling_ft:
+            return None
+        ap = self._near_airport(newest)
+        if ap is None:
+            return None
+        to_then = bearing_deg(first.latitude, first.longitude, ap.latitude, ap.longitude)
+        to_now = bearing_deg(newest.latitude, newest.longitude, ap.latitude, ap.longitude)
+        if (
+            abs(signed_turn(first.track_deg, to_then)) <= self.approach_inbound_deg
+            and abs(signed_turn(track, to_now)) >= self.approach_outbound_deg
+        ):
+            return "approach"
+        return None
 
     def _in_departure_phase(self, window: Sequence[StateVector]) -> bool:
         alts = [s.altitude_ft for s in window if s.altitude_ft is not None]
@@ -203,6 +258,8 @@ class Turnback:
         # The newest report may lack a track; describe the latest one that has it.
         current_track = pts[-1].track_deg
         assert current_track is not None
+        if self._terminal_manoeuvre(window, first, current_track, climb) is not None:
+            return None
         return Alert(
             rule=self.name,
             severity=Severity.MEDIUM,

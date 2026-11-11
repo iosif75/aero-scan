@@ -10,7 +10,7 @@
 | Detected before the 7700 squawk | 19 |
 | Median lead time vs squawk | 195.0 s |
 | False alarms, normal part of 7700 flights | 7 in 271.0 h (0.0258/h) |
-| False alarms, Dublin approaches | 78 of 8945 flights (0.87%) |
+| False alarms, Dublin approaches | 35 of 8945 flights (0.39%) |
 | Squawk rule recall (squawk visible) | 99.1% |
 
 | Category | Flights | Detected | Recall |
@@ -42,18 +42,18 @@
 | Metric | Value |
 | --- | --- |
 | 7700 flights | 397 |
-| Trajectory-only recall (all) | 23.7% |
+| Trajectory-only recall (all) | 23.4% |
 | Trajectory-only recall (diverted) | 52.4% |
-| Detected before the 7700 squawk | 17 |
-| Median lead time vs squawk | 170.0 s |
+| Detected before the 7700 squawk | 16 |
+| Median lead time vs squawk | 164.0 s |
 | False alarms, normal part of 7700 flights | 10 in 288.7 h (0.0346/h) |
-| False alarms, Dublin approaches | 73 of 8756 flights (0.83%) |
+| False alarms, Dublin approaches | 30 of 8756 flights (0.34%) |
 | Squawk rule recall (squawk visible) | 100.0% |
 
 | Category | Flights | Detected | Recall |
 | --- | --- | --- | --- |
 | unlabelled | 186 | 7 | 4% |
-| unclear | 104 | 31 | 30% |
+| unclear | 104 | 30 | 29% |
 | medical | 40 | 22 | 55% |
 | technical | 11 | 6 | 55% |
 | smoke_burn_smell_flames | 11 | 8 | 73% |
@@ -81,10 +81,10 @@
 | Flights | 18,696 | 18,696 |
 | Flight-hours in region | 9,528 | 9,675 |
 | Descents from cruise | 7,462 | 7,569 |
-| Flights with a false alarm | 87 | 110 |
-| False-alarm rate per flight | 0.47% | 0.59% |
-| False alarms per flight-hour | 0.0120 | 0.0129 |
+| Flights with a false alarm | 85 | 101 |
+| False-alarm rate per flight | 0.45% | 0.54% |
+| False alarms per flight-hour | 0.0116 | 0.0120 |
 | `rapid_descent` alerts | 47 | 58 |
-| `turnback` alerts | 67 | 67 |
+| `turnback` alerts | 64 | 58 |
 
 Emergency squawks seen: 4 flights, 3 held on consecutive polls (excluded from false alarms), 0 of those also flagged by trajectory rules.

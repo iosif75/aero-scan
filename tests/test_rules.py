@@ -94,6 +94,33 @@ class TestTurnback:
         svs = [replace(sv, groundspeed_kt=150.0) for sv in track([12_000.0] * 8, tracks)]
         assert self.rule.evaluate(svs) is None
 
+    # The helper's tracks sit at 41.0N 2.0E, 18 NM south of El Prat (bearing about 011).
+    def test_ignores_approach_vectoring(self) -> None:
+        # Inbound to El Prat at 12,000 ft, then vectored back out to the south.
+        tracks = [10, 10, 10, 60, 120, 170, 190, 190]
+        assert self.rule.evaluate(track([12_000.0] * 8, tracks)) is None
+
+    def test_fires_on_return_towards_an_airport(self) -> None:
+        # Outbound to the south, then reversing towards El Prat: what a return looks like.
+        tracks = [190, 190, 190, 140, 80, 30, 10, 10]
+        assert self.rule.evaluate(track([12_000.0] * 8, tracks)) is not None
+
+    def test_approach_test_only_applies_below_its_altitude(self) -> None:
+        tracks = [10, 10, 10, 60, 120, 170, 190, 190]
+        assert self.rule.evaluate(track([30_000.0] * 8, tracks)) is not None
+
+    def test_approach_test_can_be_turned_off(self) -> None:
+        tracks = [10, 10, 10, 60, 120, 170, 190, 190]
+        assert Turnback(airports=()).evaluate(track([12_000.0] * 8, tracks)) is not None
+
+    def test_ignores_slow_climb_out_turning_on_course(self) -> None:
+        # Seen at 8,000 ft near El Prat, climbing 600 ft/min: too high for the
+        # departure-phase test, too slow for the climb test.
+        alts = [8_000.0 + 600 * i for i in range(8)]
+        tracks = [90, 90, 90, 130, 180, 240, 270, 270]
+        assert self.rule.evaluate(track(alts, tracks)) is None
+        assert Turnback(airports=()).evaluate(track(alts, tracks)) is not None
+
     def test_holding_is_not_a_turnback(self) -> None:
         tracks = [0, 90, 180, 270, 0, 90, 180, 270, 0]
         assert self.rule.evaluate(track([12_000.0] * 9, tracks)) is None

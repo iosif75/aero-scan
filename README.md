@@ -58,10 +58,10 @@ Barcelona alone saw too few emergencies to measure recall (11 of 832 in the refe
 | Metric | Test split |
 | --- | --- |
 | Squawk-7700 flights | 397 |
-| Detected from trajectory alone, all flights | 24% |
+| Detected from trajectory alone, all flights | 23% |
 | Detected from trajectory alone, flights that diverted | 52% |
-| Detected before the 7700 squawk appeared | 17 flights |
-| Median detection time | 170 s after the squawk |
+| Detected before the 7700 squawk appeared | 16 flights |
+| Median detection time | 164 s after the squawk |
 | Emergency-squawk rule, squawk visible | 100% |
 
 Recall by reported problem (categories with ≥ 9 flights):
@@ -73,7 +73,7 @@ Recall by reported problem (categories with ≥ 9 flights):
 | Technical | 11 | 6 (55%) |
 | Medical | 40 | 22 (55%) |
 | Engine | 10 | 5 (50%) |
-| Unclear | 104 | 31 (30%) |
+| Unclear | 104 | 30 (29%) |
 | No public report | 186 | 7 (4%) |
 
 **How to read this.** Many 7700 squawks leave no trace in the trajectory: the crew declares, carries on and lands as planned. Flights with no news or Aviation Herald report are mostly of that kind, hence 4%. Where the emergency changes the flight (a pressurisation descent, a return or a diversion), the rules catch about half or more. This is why the squawk rule stays in the live system: trajectory rules add early warning and context; they don't replace it.
@@ -82,12 +82,12 @@ Recall by reported problem (categories with ≥ 9 flights):
 
 | Dataset | Test split |
 | --- | --- |
-| **Barcelona region, 12 days of 2025** | 110 of 18,698 flights flagged (0.59%), 1 alert per ~78 flight-hours |
+| **Barcelona region, 12 days of 2025** | 101 of 18,698 flights flagged (0.54%), 1 alert per ~83 flight-hours |
 | of which descents from cruise | 7,569 flights, 58 `rapid_descent` alerts |
-| Dublin approaches, 2019 | 73 of 8,756 flights (0.83%) |
+| Dublin approaches, 2019 | 30 of 8,756 flights (0.34%) |
 | Normal part of the 7700 flights | 10 alerts in 289 flight-hours |
 
-In operational terms, the Barcelona region sees about 3,100 flights a day, so **about 18 flights a day would be flagged in error**. That is the number to bring down: the [triage step](#alert-triage-milestone-2) behind looser rules cuts it to about 8 a day while catching more emergencies.
+In operational terms, the Barcelona region sees about 3,100 flights a day, so **about 17 flights a day would be flagged in error** (18 before the turnback rule got airport context). That is the number to bring down: the [triage step](#alert-triage-milestone-2) behind looser rules cuts it to about 8 a day while catching more emergencies.
 
 Emergency squawks seen in the 12 Barcelona days: 4 flights. Three held the code long enough to be reported by the squawk rule (two 7600 radio failures, one 7700) and are excluded from the false alarms; none showed a trajectory anomaly. The fourth was a 7700 lasting about a second, which the persistence filter correctly ignored.
 
@@ -95,7 +95,7 @@ Full output, including the dev split: [`eval/results/report.md`](eval/results/re
 
 ### Known limitations
 
-- **Turnbacks remain the main false alarm**: 67 of the 125 Barcelona test alerts and most Dublin ones, typically vectoring and approach manoeuvres above 10,000 ft. Approach context (distance and bearing to the nearest airport) is the obvious next rule input.
+- **Turnbacks remain the main false alarm**: 58 of the 116 Barcelona test alerts and most Dublin ones. Airport context (below) removed most approach vectoring and slow climb-outs; what is left is mostly calibration, training and test flights flying racetracks, and arrivals that overfly an airport and turn back to land. The last look like a real return (a turn towards an airport while descending): an arrival test cut 4 more Barcelona flags but cost 2 test emergencies, so it was left out.
 - **Steep normal descents**: at −3,750 ft/min the descent rule still flags about 0.3% of ordinary Barcelona flights.
 - Ground truth for emergencies is "squawked 7700", so 7700 onset is the reference time. Some emergencies start earlier, which is why alerts up to 10 minutes before onset count as detections.
 - The Barcelona false-alarm count is an upper bound: an alert on an ordinary day may occasionally be a real, unreported event.
@@ -137,6 +137,8 @@ The gradient-boosted model, trained on all dev alerts, goes behind the loose rul
 
 That is 13% more emergencies caught and less than half the Barcelona false alarms: about 8 a day across the whole region instead of about 18. The loose rules alone would catch 132 emergencies but flag 2,709 Barcelona flights; the triage step is what makes them usable.
 
+The strict-rules column predates the airport context in the turnback rule (step 4 of the [evaluation method](#evaluation-method)); with it, the strict rules detect 93, flag 101 Barcelona and 30 Dublin flights, and still raise 10 alarms on the normal part of the 7700 flights. The loose rules behind triage run without the airport tests, so the model and its column are unchanged.
+
 The live pipeline (`aeroscan/pipeline.py`) runs exactly this: replaying the test flights through it reproduces the table above. Raw numbers: [`eval/results/pipeline.json`](eval/results/pipeline.json). The trained model is not distributed; `aeroscan triage fit` builds it locally.
 
 ## Evaluation method
@@ -152,6 +154,7 @@ The live pipeline (`aeroscan/pipeline.py`) runs exactly this: replaying the test
   1. Climb gate on turnbacks: before it, all 73 dev false alarms on the 7700 flights were turnbacks, mostly departures reversing while still climbing. The gate cut them to 16 for a loss of 8 of 93 detections.
   2. Departure-phase and speed gates on turnbacks: Barcelona and Palma departures take off eastbound over the sea and turn west, and on short legs reach cruise during the turn. Ignoring reversals by aircraft seen below 5,000 ft earlier in the window, and by aircraft slower than 220 kt (light aircraft), cut Barcelona dev flags from 51 to 32 for a loss of 6 of 106 detections.
   3. Descent threshold: −3,500 ft/min flagged 0.6% of ordinary Barcelona dev flights; −3,750 cut that to 0.2% for a loss of 8 of 100 detections.
+  4. Airport context on turnbacks, from the nearest airport with scheduled service ([OurAirports](https://ourairports.com), bundled in `aeroscan/airports.csv`), within 40 NM. *Approach vectoring*: below 18,000 ft, the track was within 60° of the airport's bearing at the start of the turn and is now at least 120° off it (a downwind leg or a sequencing vector). *Slow climb-out*: the window's lowest report was at or below 10,000 ft within 40 NM of an airport, and the aircraft is still climbing at 500 ft/min or more. Together they cut dev flags from 87 to 85 in Barcelona and from 78 to 35 at Dublin, with no loss of the 92 dev detections. On the test split: Barcelona 110 to 101 flagged flights, Dublin 73 to 30, detections 94 to 93.
 
 ## Rules
 
@@ -159,7 +162,7 @@ The live pipeline (`aeroscan/pipeline.py`) runs exactly this: replaying the test
 | --- | --- | --- |
 | `squawk_emergency` | 7500 / 7600 / 7700 on 2 consecutive polls (filters accidental selections) | HIGH (7600: MEDIUM) |
 | `rapid_descent` | ≤ −3,750 ft/min averaged over 2 consecutive minutes, starting ≥ 15,000 ft | HIGH |
-| `turnback` | Track reversed ≥ 135° and held, ≥ 10,000 ft and ≥ 220 kt, not looping, not climbing > 1,000 ft/min, not in the departure phase | MEDIUM |
+| `turnback` | Track reversed ≥ 135° and held, ≥ 10,000 ft and ≥ 220 kt, not looping, not climbing > 1,000 ft/min, not in the departure phase, not approach vectoring or a slow climb-out near an airport | MEDIUM |
 | `holding` | ≥ 330° of same-direction turn within 12 min | INFO |
 
 Rates come from altitude differences between polls, not the reported instantaneous vertical rate. Implausible jumps (> 20,000 ft/min) are treated as corrupt reports, and the detector never reasons across coverage gaps.
@@ -212,6 +215,8 @@ The API is read-only: each request opens its own read-only SQLite connection, so
 Trajectory data: The OpenSky Network, https://opensky-network.org. M. Schäfer, M. Strohmeier, V. Lenders, I. Martinovic, M. Wilhelm, *Bringing up OpenSky: A large-scale ADS-B sensor network for research*, IPSN 2014.
 
 squawk7700 dataset: X. Olive, A. Tanner, M. Strohmeier, M. Schäfer, M. Feridun, A. Tart, I. Martinovic, V. Lenders, *Reference datasets for in-flight emergency situations*, Zenodo, 2020, doi:10.5281/zenodo.3937483. Dublin arrivals: 4TU.ResearchData, doi:10.4121/20411868.v1 (CC BY-NC-SA 3.0).
+
+Airports: [OurAirports](https://ourairports.com) (public domain), the large and medium airports with scheduled service; `scripts/update_airports.py` rebuilds the bundled list.
 
 Map tiles: © OpenStreetMap contributors (ODbL), via the standard OSM tile server.
 

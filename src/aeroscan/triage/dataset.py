@@ -63,7 +63,12 @@ def candidate_rules() -> list[Rule]:
     """Looser than the production rules: the triage model is meant to do the filtering."""
     return [
         RapidDescent(threshold_fpm=-3000.0),
-        Turnback(max_climb_fpm=float("inf"), departure_floor_ft=-1.0, min_groundspeed_kt=0.0),
+        Turnback(
+            max_climb_fpm=float("inf"),
+            departure_floor_ft=-1.0,
+            min_groundspeed_kt=0.0,
+            airports=(),  # no terminal-area tests: the model was trained without them
+        ),
         Holding(),
     ]
 
