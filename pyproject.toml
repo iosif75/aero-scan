@@ -1,7 +1,7 @@
 [project]
 name = "aeroscan"
 version = "0.1.0"
-description = "Flight anomaly detection on open ADS-B data: deterministic rules decide, a local LLM explains."
+description = "Flight anomaly detection on open ADS-B data: deterministic rules flag, a gradient-boosted triage model filters."
 readme = "README.md"
 license = "MIT"
 authors = [{ name = "Iosif Baisan" }]
