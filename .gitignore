@@ -9,7 +9,6 @@ build/
 *.egg-info/
 
 # Downloaded datasets (fetched and checksummed by `aeroscan fetch-data`)
-data/
 data
 
 # Secrets
