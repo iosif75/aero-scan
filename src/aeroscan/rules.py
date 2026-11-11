@@ -12,10 +12,11 @@ only (see "Evaluation" in the README).
 
 from __future__ import annotations
 
+import inspect
 import itertools
 from collections.abc import Sequence
-from dataclasses import dataclass
-from typing import Protocol
+from dataclasses import dataclass, fields, is_dataclass
+from typing import Any, Protocol
 
 from .airports import Airport, bearing_deg, nearest_airport
 from .models import EMERGENCY_SQUAWKS, Alert, Severity, StateVector
@@ -350,3 +351,25 @@ class EmergencySquawk:
 
 def default_rules() -> list[Rule]:
     return [EmergencySquawk(), RapidDescent(), Turnback(), Holding()]
+
+
+def describe_rules(rules: Sequence[Rule]) -> list[dict[str, Any]]:
+    """Each rule's name, description and scalar thresholds, for the API's rule catalog."""
+    out = []
+    for r in rules:
+        doc = inspect.cleandoc(type(r).__doc__ or "")
+        names: list[str] = [f.name for f in fields(r)] if is_dataclass(r) else []
+        params = {
+            n: getattr(r, n)
+            for n in names
+            if n != "name" and isinstance(getattr(r, n), int | float | str | bool)
+        }
+        out.append(
+            {
+                "name": r.name,
+                "summary": doc.split("\n", 1)[0],
+                "description": doc,
+                "parameters": params,
+            }
+        )
+    return out

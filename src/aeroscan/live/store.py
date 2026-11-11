@@ -1,5 +1,7 @@
-"""SQLite storage for live alerts, polls and the latest positions (standard library only).
+"""SQLite storage for live alerts, polls and positions (standard library only).
 
+`positions` holds the latest poll's snapshot; `tracks` keeps every report for a
+rolling retention window, so each alert can be shown with the path that raised it.
 WAL mode lets the API read while the poller writes.
 """
 
@@ -7,11 +9,13 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import UTC, datetime
+from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 from ..models import Alert, StateVector
+from ..rules import Rule, describe_rules
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS alerts (
@@ -26,6 +30,7 @@ CREATE TABLE IF NOT EXISTS alerts (
     p_real REAL
 );
 CREATE INDEX IF NOT EXISTS alerts_time ON alerts (detected_at);
+CREATE INDEX IF NOT EXISTS alerts_aircraft ON alerts (icao24, detected_at);
 CREATE TABLE IF NOT EXISTS polls (
     polled_at TEXT PRIMARY KEY,
     aircraft INTEGER NOT NULL,
@@ -46,6 +51,21 @@ CREATE TABLE IF NOT EXISTS positions (
     squawk TEXT,
     on_ground INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS tracks (
+    icao24 TEXT NOT NULL,
+    seen_at TEXT NOT NULL,
+    callsign TEXT,
+    latitude REAL NOT NULL,
+    longitude REAL NOT NULL,
+    altitude_ft REAL,
+    groundspeed_kt REAL,
+    track_deg REAL,
+    vertical_rate_fpm REAL,
+    squawk TEXT,
+    on_ground INTEGER NOT NULL,
+    PRIMARY KEY (icao24, seen_at)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS tracks_time ON tracks (seen_at);
 CREATE TABLE IF NOT EXISTS meta (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -53,9 +73,28 @@ CREATE TABLE IF NOT EXISTS meta (
 """
 
 
+DEFAULT_TRACK_RETENTION = timedelta(hours=24)
+
+
 def _round(v: float | None, digits: int) -> float | None:
     """Display precision for stored positions; the detector works on unrounded values."""
     return None if v is None else round(v, digits)
+
+
+def _row(s: StateVector) -> tuple[Any, ...]:
+    return (
+        s.icao24,
+        s.callsign,
+        s.timestamp.astimezone(UTC).isoformat(),
+        s.latitude,
+        s.longitude,
+        _round(s.altitude_ft, 0),
+        _round(s.groundspeed_kt, 1),
+        _round(s.track_deg, 1),
+        _round(s.vertical_rate_fpm, 0),
+        s.squawk,
+        int(s.on_ground),
+    )
 
 
 class AlertStore:
@@ -93,29 +132,33 @@ class AlertStore:
         )
         self.db.commit()
 
-    def replace_positions(self, svs: list[StateVector]) -> None:
-        """The latest poll's aircraft, replacing the previous snapshot in one transaction."""
+    def replace_positions(
+        self,
+        svs: list[StateVector],
+        now: datetime | None = None,
+        keep_tracks: timedelta = DEFAULT_TRACK_RETENTION,
+    ) -> None:
+        """The latest poll's aircraft, in one transaction: replaces the snapshot, appends
+        the reports to the track history and drops history older than `keep_tracks`
+        (counted back from `now`, default the newest report)."""
+        rows = [_row(s) for s in svs]
         with self.db:
             self.db.execute("DELETE FROM positions")
             self.db.executemany(
-                "INSERT OR REPLACE INTO positions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                [
-                    (
-                        s.icao24,
-                        s.callsign,
-                        s.timestamp.astimezone(UTC).isoformat(),
-                        s.latitude,
-                        s.longitude,
-                        _round(s.altitude_ft, 0),
-                        _round(s.groundspeed_kt, 1),
-                        _round(s.track_deg, 1),
-                        _round(s.vertical_rate_fpm, 0),
-                        s.squawk,
-                        int(s.on_ground),
-                    )
-                    for s in svs
-                ],
+                "INSERT OR REPLACE INTO positions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows
             )
+            # A report repeats across polls while an aircraft sends nothing new: keep one.
+            self.db.executemany(
+                "INSERT OR IGNORE INTO tracks (icao24, callsign, seen_at, latitude, longitude,"
+                " altitude_ft, groundspeed_kt, track_deg, vertical_rate_fpm, squawk, on_ground)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            if now is None and svs:
+                now = max(s.timestamp for s in svs)
+            if now is not None:
+                cutoff = (now - keep_tracks).astimezone(UTC).isoformat()
+                self.db.execute("DELETE FROM tracks WHERE seen_at < ?", (cutoff,))
 
     def recent_alerts(self, limit: int = 50) -> list[dict[str, Any]]:
         cur = self.db.execute(
@@ -125,6 +168,10 @@ class AlertStore:
         )
         cols = [c[0] for c in cur.description]
         return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
+
+    def set_rules(self, rules: Sequence[Rule]) -> None:
+        """Record the running rule set, so the API describes what is actually live."""
+        self.set_meta({"rules": json.dumps(describe_rules(rules))})
 
     def set_meta(self, values: dict[str, str]) -> None:
         with self.db:

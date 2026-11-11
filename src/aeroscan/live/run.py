@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from ..pipeline import Pipeline
 from ..region import Region
 from .opensky import OpenSkyClient, RateLimited
-from .store import AlertStore
+from .store import DEFAULT_TRACK_RETENTION, AlertStore
 
 ANONYMOUS_CREDITS_PER_DAY = 400
 REGISTERED_CREDITS_PER_DAY = 4000
@@ -44,6 +44,7 @@ def run(
     log: Callable[[str], None] = print,
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.time,
+    keep_tracks: timedelta = DEFAULT_TRACK_RETENTION,
 ) -> int:
     """Poll until `max_polls` (forever if None). Returns the number of alerts raised."""
     total = polls = 0
@@ -80,7 +81,7 @@ def run(
         total += len(alerts)
         at = datetime.fromtimestamp(server_time, UTC)
         pipeline.detector.prune(at)
-        store.replace_positions(svs)
+        store.replace_positions(svs, now=at, keep_tracks=keep_tracks)
         store.add_poll(
             at, len(svs), len(alerts), pipeline.suppressed - before, client.credits_remaining
         )

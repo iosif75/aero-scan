@@ -154,3 +154,22 @@ def test_live_loop_stores_alerts_and_polls() -> None:
     assert alert["rule"] == "squawk_emergency" and alert["severity"] == "HIGH"
     assert store.db.execute("SELECT COUNT(*) FROM polls").fetchone()[0] == 3
     assert any(line.startswith("ALERT HIGH") for line in logs)
+    # Each poll's reports join the track history.
+    assert store.db.execute("SELECT COUNT(*) FROM tracks").fetchone()[0] >= 3
+
+
+def test_track_history_dedupes_and_prunes() -> None:
+    from dataclasses import replace
+    from datetime import timedelta
+
+    from helpers import T0, track
+
+    store = AlertStore(":memory:")
+    [sv] = track([30_000.0])
+    store.replace_positions([sv])
+    store.replace_positions([sv])  # same report seen on the next poll: stored once
+    later = replace(sv, timestamp=T0 + timedelta(hours=3))
+    store.replace_positions([later], keep_tracks=timedelta(hours=2))
+    rows = store.db.execute("SELECT seen_at FROM tracks").fetchall()
+    assert rows == [(later.timestamp.isoformat(),)]
+    assert store.db.execute("SELECT COUNT(*) FROM positions").fetchone()[0] == 1

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 DEFAULT_MODEL = Path("models/triage_gbm.pkl")
@@ -42,6 +43,12 @@ def main(argv: list[str] | None = None) -> None:
         sp.add_argument("--db", type=Path, default=Path("alerts.sqlite"))
         sp.add_argument("--model", type=Path, default=DEFAULT_MODEL, help="triage model, if built")
         sp.add_argument("--credentials", type=Path, default=Path("credentials.json"))
+        sp.add_argument(
+            "--keep-tracks-hours",
+            type=float,
+            default=24.0,
+            help="hours of position history to keep for the API (default 24)",
+        )
     lv.add_argument("--polls", type=int, default=None, help="stop after this many polls")
     sv.add_argument(
         "--host", default="127.0.0.1", help="interface to bind (default: this machine only)"
@@ -106,8 +113,14 @@ def _live(args: argparse.Namespace, max_polls: int | None = None) -> None:
         print(f"Note: {warning}")
     store = AlertStore(args.db)
     store.set_meta(
-        {"mode": pipeline.mode, "region": BARCELONA.name, "interval_s": str(args.interval)}
+        {
+            "mode": pipeline.mode,
+            "region": BARCELONA.name,
+            "interval_s": str(args.interval),
+            "keep_tracks_hours": str(args.keep_tracks_hours),
+        }
     )
+    store.set_rules(pipeline.detector.rules)
     try:
         run(
             BARCELONA,
@@ -116,6 +129,7 @@ def _live(args: argparse.Namespace, max_polls: int | None = None) -> None:
             store,
             args.interval,
             max_polls or getattr(args, "polls", None),
+            keep_tracks=timedelta(hours=args.keep_tracks_hours),
         )
     except KeyboardInterrupt:
         print("stopped")

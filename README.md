@@ -187,15 +187,19 @@ uv run aeroscan triage fit          # model -> models/triage_gbm.pkl, pipeline t
 
 | Endpoint | Returns |
 | --- | --- |
-| `GET /api/v1/alerts` | Alerts, newest first. Filters: `since`, `until`, `rule`, `severity`, `icao24`; paging: `limit` (≤ 500), `offset` |
+| `GET /api/v1/alerts` | Alerts, newest first. Filters: `since`, `until` (no zone means UTC), `rule` and `severity` (repeat for several), `icao24`, `callsign` (prefix, any case), `min_p_real`. Paging: `limit` (≤ 500) and `cursor`, from the `Link: rel="next"` header; `X-Total-Count` gives the number of matches |
 | `GET /api/v1/alerts/{id}` | One alert, with its evidence and triage score |
+| `GET /api/v1/alerts/{id}/track` | The alert with the flight path around it (`before_min`, default 15, and `after_min`, default 10) |
 | `GET /api/v1/aircraft` | Aircraft in the latest poll, flagged if alerted in the last `alerted_within_min` minutes |
+| `GET /api/v1/aircraft/{icao24}` | One aircraft: its current state, the last `minutes` (default 60) of its track, and its recent alerts |
+| `GET /api/v1/rules` | The rules the monitor runs: description, thresholds, alert counts |
 | `GET /api/v1/polls` | Recent polls: aircraft seen, alerts raised and filtered, credits left |
 | `GET /api/v1/stats` | Mode, counts, alerts in the last 24 h by rule, credits left |
+| `GET /api/v1/stats/timeline` | Alerts by rule, filtered alerts and polls per UTC `hour` or `day` bucket, empty buckets included |
 | `GET /api/v1/health` | `ok`, `stale` (monitor not polling) or `no_data` |
 | `GET /docs` | Interactive OpenAPI documentation |
 
-The API is read-only: each request opens its own read-only SQLite connection, so it can't interfere with the poller (the database runs in WAL mode for concurrent reads). It listens on `127.0.0.1` by default. OpenSky's terms cover personal and research use, so check them before exposing the API publicly with `--host 0.0.0.0`.
+The API is read-only: each request opens its own read-only SQLite connection, so it can't interfere with the poller (the database runs in WAL mode for concurrent reads). The poller keeps every position report for 24 hours (`--keep-tracks-hours`), so an alert can be shown with the path that raised it; at about 300 aircraft a minute that is roughly 430,000 rows, or under 100 MB. It listens on `127.0.0.1` by default. OpenSky's terms cover personal and research use, so check them before exposing the API publicly with `--host 0.0.0.0`.
 
 - **Credentials.** Without them, requests are anonymous: 400 credits a day, counted per IP address, so a 60 s poll runs out after about 6.7 hours. With an OpenSky API client (4,000 credits a day) it runs all day. Put OpenSky's `credentials.json` in the working directory, or set `OPENSKY_CLIENT_ID` and `OPENSKY_CLIENT_SECRET`. Tokens are refreshed before their 30-minute expiry.
 - **Cost.** The Barcelona box is 20 square degrees, which is 1 credit per poll: 1,440 a day at 60 s.
