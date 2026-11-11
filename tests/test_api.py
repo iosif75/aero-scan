@@ -1,6 +1,11 @@
 from __future__ import annotations
 
+import csv
+import io
+import json
 import sqlite3
+import threading
+import time
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -224,3 +229,99 @@ def test_database_without_track_history_or_rules(db: Path) -> None:
     assert c.get("/api/v1/aircraft/abc123").json()["track"] == []
     assert c.get("/api/v1/alerts/1/track").json()["track"] == []
     assert c.get("/api/v1/rules").json()["live"] is False
+
+
+def _events(text: str) -> list[tuple[str, dict[str, object], str | None]]:
+    """(event, data, id) for each server-sent event in a stream body."""
+    out = []
+    for block in text.split("\n\n"):
+        fields = dict(
+            line.split(": ", 1) for line in block.splitlines() if ": " in line and line[0] != ":"
+        )
+        if "event" in fields:
+            out.append((fields["event"], json.loads(fields["data"]), fields.get("id")))
+    return out
+
+
+def test_stream_replays_and_resumes(db: Path) -> None:
+    c = TestClient(create_app(db, stream_check_s=0.01))
+    r = c.get("/api/v1/stream?after_id=0&max_seconds=0.05")
+    assert r.headers["content-type"].startswith("text/event-stream")
+    assert "ETag" not in r.headers
+    alerts = [(e, d["rule"], i) for e, d, i in _events(r.text) if e == "alert"]
+    assert alerts == [
+        ("alert", "rapid_descent", "1"),
+        ("alert", "turnback", "2"),
+        ("alert", "squawk_emergency", "3"),
+    ]
+    # EventSource resends the last id it saw on reconnect.
+    r = c.get("/api/v1/stream?max_seconds=0.05", headers={"Last-Event-ID": "2"})
+    assert [d["id"] for e, d, _ in _events(r.text) if e == "alert"] == [3]
+    # A fresh subscriber only gets what happens from now on.
+    assert _events(c.get("/api/v1/stream?max_seconds=0.05").text) == []
+
+
+def test_stream_delivers_new_alerts_and_polls(db: Path) -> None:
+    c = TestClient(create_app(db, stream_check_s=0.02))
+
+    def poller() -> None:
+        time.sleep(0.2)
+        store = AlertStore(db)
+        store.add_alert(_alert(0, "holding", Severity.INFO))
+        store.add_poll(datetime.now(UTC) + timedelta(seconds=1), 2, 1, 0, 3988)
+        store.close()
+
+    t = threading.Thread(target=poller)
+    t.start()
+    r = c.get("/api/v1/stream?max_seconds=1")
+    t.join()
+    events = _events(r.text)
+    assert [(e, d.get("rule")) for e, d, _ in events] == [("alert", "holding"), ("poll", None)]
+    assert events[1][1]["credits_remaining"] == 3988
+
+
+def test_csv_export_uses_the_same_filters(client: TestClient) -> None:
+    r = client.get("/api/v1/alerts.csv?severity=HIGH")
+    assert r.headers["content-type"].startswith("text/csv")
+    assert "attachment" in r.headers["content-disposition"]
+    rows = list(csv.DictReader(io.StringIO(r.text)))
+    assert [x["rule"] for x in rows] == ["squawk_emergency", "rapid_descent"]
+    assert json.loads(rows[0]["evidence"]) == {"squawk": "7700"}
+    assert rows[0]["p_real"] == "" and float(rows[1]["p_real"]) == pytest.approx(0.83)
+
+
+def test_geojson(client: TestClient) -> None:
+    fc = client.get("/api/v1/geo/aircraft")
+    assert fc.headers["content-type"].startswith("application/geo+json")
+    feats = fc.json()["features"]
+    assert {f["properties"]["icao24"] for f in feats} == {"abc123", "bbbbbb"}
+    assert feats[0]["geometry"] == {"type": "Point", "coordinates": [2.0, 41.0]}
+    [line] = client.get("/api/v1/geo/aircraft/abc123/track").json()["features"]
+    assert line["geometry"]["type"] == "LineString"
+    assert len(line["geometry"]["coordinates"]) == len(line["properties"]["seen_at"]) == 21
+    [single] = client.get("/api/v1/geo/aircraft/bbbbbb/track").json()["features"]
+    assert single["geometry"]["type"] == "Point"
+    alert = client.get("/api/v1/geo/alerts/2").json()["features"]
+    assert [f["properties"]["kind"] for f in alert] == ["track", "alert"]
+    assert alert[1]["properties"]["rule"] == "turnback"
+    assert client.get("/api/v1/geo/alerts/999").status_code == 404
+    assert client.get("/api/v1/geo/aircraft/ffffff/track").status_code == 404
+
+
+def test_etag_revalidation(client: TestClient) -> None:
+    r = client.get("/api/v1/alerts")
+    tag = r.headers["ETag"]
+    assert r.headers["Cache-Control"] == "no-cache" and r.headers["X-Total-Count"] == "3"
+    again = client.get("/api/v1/alerts", headers={"If-None-Match": tag})
+    assert again.status_code == 304 and again.content == b""
+    assert client.get("/api/v1/alerts?limit=1", headers={"If-None-Match": tag}).status_code == 200
+    assert "ETag" not in client.get("/api/v1/alerts/999").headers
+
+
+def test_openapi_documents_errors_and_examples(client: TestClient) -> None:
+    spec = client.get("/openapi.json").json()
+    detail = spec["paths"]["/api/v1/alerts/{alert_id}"]["get"]["responses"]
+    assert detail["404"]["content"]["application/json"]["schema"]["$ref"].endswith("ErrorOut")
+    assert "503" in detail
+    assert spec["components"]["schemas"]["AlertOut"]["examples"][0]["rule"] == "turnback"
+    assert "/api/v1/stream" in spec["paths"] and "/api/v1/alerts.csv" in spec["paths"]

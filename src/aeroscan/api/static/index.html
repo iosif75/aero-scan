@@ -93,8 +93,18 @@ function update() {
   });
 }
 
+// Refresh when the monitor reports a poll or an alert, instead of polling the API.
+var pending = null;
+function soon() {  // several events arrive together after each poll: refresh once
+  if (pending === null) pending = setTimeout(function () { pending = null; update(); }, 300);
+}
 update();
-setInterval(update, 15000);
+if (window.EventSource) {
+  var events = new EventSource("/api/v1/stream");
+  events.addEventListener("poll", soon);
+  events.addEventListener("alert", soon);
+}
+setInterval(update, 120000);  // safety net if the stream is down; EventSource reconnects itself
 </script>
 </body>
 </html>

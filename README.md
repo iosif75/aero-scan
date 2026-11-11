@@ -197,7 +197,14 @@ uv run aeroscan triage fit          # model -> models/triage_gbm.pkl, pipeline t
 | `GET /api/v1/stats` | Mode, counts, alerts in the last 24 h by rule, credits left |
 | `GET /api/v1/stats/timeline` | Alerts by rule, filtered alerts and polls per UTC `hour` or `day` bucket, empty buckets included |
 | `GET /api/v1/health` | `ok`, `stale` (monitor not polling) or `no_data` |
+| `GET /api/v1/stream` | Server-sent events: `alert` as each alert is stored, `poll` after each poll. Reconnects resume from `Last-Event-ID`; `after_id=0` replays every alert first |
+| `GET /api/v1/alerts.csv` | Alerts as CSV, with the same filters as `/alerts` (`limit` ≤ 100,000) |
+| `GET /api/v1/geo/aircraft` | Aircraft in the latest poll as GeoJSON points |
+| `GET /api/v1/geo/aircraft/{icao24}/track` | An aircraft's recent track as a GeoJSON line |
+| `GET /api/v1/geo/alerts/{id}` | An alert as GeoJSON: the track around it, and the point where it was raised |
 | `GET /docs` | Interactive OpenAPI documentation |
+
+Times are UTC, and a time without a zone is read as UTC. Errors are JSON with a `detail` field. JSON responses carry an `ETag`, so a client that sends it back in `If-None-Match` gets `304 Not Modified` when nothing changed. The map follows the event stream rather than polling. From a script: `curl -N http://127.0.0.1:8000/api/v1/stream`.
 
 The API is read-only: each request opens its own read-only SQLite connection, so it can't interfere with the poller (the database runs in WAL mode for concurrent reads). The poller keeps every position report for 24 hours (`--keep-tracks-hours`), so an alert can be shown with the path that raised it; at about 300 aircraft a minute that is roughly 430,000 rows, or under 100 MB. It listens on `127.0.0.1` by default. OpenSky's terms cover personal and research use, so check them before exposing the API publicly with `--host 0.0.0.0`.
 
