@@ -64,6 +64,10 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = [
+    # Starlette 1.x wants the httpx2 package for its TestClient; plain httpx still works.
+    "ignore:Using `httpx` with `starlette.testclient` is deprecated",
+]
 
 # PyTorch: CUDA 12.8 build on Windows (consumer NVIDIA GPUs), CPU build on Linux/macOS.
 [tool.uv.sources]
