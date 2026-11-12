@@ -150,8 +150,8 @@ def test_live_loop_stores_alerts_and_polls() -> None:
         clock=lambda: 0.0,
     )
     assert n == 1
-    [alert] = store.recent_alerts()
-    assert alert["rule"] == "squawk_emergency" and alert["severity"] == "HIGH"
+    [alert] = store.db.execute("SELECT rule, severity FROM alerts").fetchall()
+    assert alert == ("squawk_emergency", "HIGH")
     assert store.db.execute("SELECT COUNT(*) FROM polls").fetchone()[0] == 3
     assert any(line.startswith("ALERT HIGH") for line in logs)
     # Each poll's reports join the track history.

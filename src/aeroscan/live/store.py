@@ -104,7 +104,47 @@ class AlertStore:
             self.db.execute("PRAGMA journal_mode=WAL")
         self.db.executescript(SCHEMA)
 
+    def record_poll(
+        self,
+        at: datetime,
+        svs: list[StateVector],
+        alerts: Sequence[Alert],
+        suppressed: int,
+        credits: int | None,
+        keep_tracks: timedelta = DEFAULT_TRACK_RETENTION,
+    ) -> None:
+        """Everything one poll produced, in one transaction: its alerts, the aircraft
+        snapshot and track history, and the poll itself."""
+        with self.db:
+            for a in alerts:
+                self._insert_alert(a)
+            self._replace_positions(svs, at, keep_tracks)
+            self._insert_poll(at, len(svs), len(alerts), suppressed, credits)
+
     def add_alert(self, a: Alert) -> None:
+        with self.db:
+            self._insert_alert(a)
+
+    def add_poll(
+        self, at: datetime, aircraft: int, alerts: int, suppressed: int, credits: int | None
+    ) -> None:
+        with self.db:
+            self._insert_poll(at, aircraft, alerts, suppressed, credits)
+
+    def replace_positions(
+        self,
+        svs: list[StateVector],
+        now: datetime | None = None,
+        keep_tracks: timedelta = DEFAULT_TRACK_RETENTION,
+    ) -> None:
+        """Replace the snapshot, append the reports to the track history and drop history
+        older than `keep_tracks` (counted back from `now`, default the newest report)."""
+        if now is None and svs:
+            now = max(s.timestamp for s in svs)
+        with self.db:
+            self._replace_positions(svs, now, keep_tracks)
+
+    def _insert_alert(self, a: Alert) -> None:
         p = a.evidence.get("triage_p_real")
         self.db.execute(
             "INSERT INTO alerts"
@@ -121,53 +161,33 @@ class AlertStore:
                 float(p) if p is not None else None,
             ),
         )
-        self.db.commit()
 
-    def add_poll(
+    def _insert_poll(
         self, at: datetime, aircraft: int, alerts: int, suppressed: int, credits: int | None
     ) -> None:
         self.db.execute(
             "INSERT OR REPLACE INTO polls VALUES (?, ?, ?, ?, ?)",
             (at.astimezone(UTC).isoformat(), aircraft, alerts, suppressed, credits),
         )
-        self.db.commit()
 
-    def replace_positions(
-        self,
-        svs: list[StateVector],
-        now: datetime | None = None,
-        keep_tracks: timedelta = DEFAULT_TRACK_RETENTION,
+    def _replace_positions(
+        self, svs: list[StateVector], now: datetime | None, keep_tracks: timedelta
     ) -> None:
-        """The latest poll's aircraft, in one transaction: replaces the snapshot, appends
-        the reports to the track history and drops history older than `keep_tracks`
-        (counted back from `now`, default the newest report)."""
         rows = [_row(s) for s in svs]
-        with self.db:
-            self.db.execute("DELETE FROM positions")
-            self.db.executemany(
-                "INSERT OR REPLACE INTO positions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows
-            )
-            # A report repeats across polls while an aircraft sends nothing new: keep one.
-            self.db.executemany(
-                "INSERT OR IGNORE INTO tracks (icao24, callsign, seen_at, latitude, longitude,"
-                " altitude_ft, groundspeed_kt, track_deg, vertical_rate_fpm, squawk, on_ground)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                rows,
-            )
-            if now is None and svs:
-                now = max(s.timestamp for s in svs)
-            if now is not None:
-                cutoff = (now - keep_tracks).astimezone(UTC).isoformat()
-                self.db.execute("DELETE FROM tracks WHERE seen_at < ?", (cutoff,))
-
-    def recent_alerts(self, limit: int = 50) -> list[dict[str, Any]]:
-        cur = self.db.execute(
-            "SELECT detected_at, rule, severity, icao24, callsign, summary, p_real"
-            " FROM alerts ORDER BY detected_at DESC LIMIT ?",
-            (limit,),
+        self.db.execute("DELETE FROM positions")
+        self.db.executemany(
+            "INSERT OR REPLACE INTO positions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows
         )
-        cols = [c[0] for c in cur.description]
-        return [dict(zip(cols, row, strict=True)) for row in cur.fetchall()]
+        # A report repeats across polls while an aircraft sends nothing new: keep one.
+        self.db.executemany(
+            "INSERT OR IGNORE INTO tracks (icao24, callsign, seen_at, latitude, longitude,"
+            " altitude_ft, groundspeed_kt, track_deg, vertical_rate_fpm, squawk, on_ground)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            rows,
+        )
+        if now is not None:
+            cutoff = (now - keep_tracks).astimezone(UTC).isoformat()
+            self.db.execute("DELETE FROM tracks WHERE seen_at < ?", (cutoff,))
 
     def set_rules(self, rules: Sequence[Rule]) -> None:
         """Record the running rule set, so the API describes what is actually live."""

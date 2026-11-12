@@ -69,11 +69,8 @@ def run(
             continue
         polls += 1
         before = pipeline.suppressed
-        alerts = []
-        for sv in svs:
-            alerts += pipeline.update(sv)
+        alerts = pipeline.update_many(svs)
         for a in alerts:
-            store.add_alert(a)
             tag = f" p_real={a.evidence['triage_p_real']}" if "triage_p_real" in a.evidence else ""
             log(
                 f"ALERT {a.severity.name:<6} {a.callsign or a.icao24:<8} {a.rule}: {a.summary}{tag}"
@@ -81,9 +78,8 @@ def run(
         total += len(alerts)
         at = datetime.fromtimestamp(server_time, UTC)
         pipeline.detector.prune(at)
-        store.replace_positions(svs, now=at, keep_tracks=keep_tracks)
-        store.add_poll(
-            at, len(svs), len(alerts), pipeline.suppressed - before, client.credits_remaining
+        store.record_poll(
+            at, svs, alerts, pipeline.suppressed - before, client.credits_remaining, keep_tracks
         )
         credits = (
             f", {client.credits_remaining} credits left"
