@@ -116,7 +116,7 @@ Two triage models were compared, **trained on the same 903 dev examples** and sc
 | Routine alerts kept at 80% recall of real ones | **70** (Barcelona: 54) | 138 (Barcelona: 103) |
 | Cause accuracy, known causes | 8% | 11.5% |
 
-The LLM (`aeroscan/triage/train.py`, LoRA r=16, 3 epochs on an RTX 4070 Ti SUPER) is scored by the likelihood it gives each allowed answer, so both models are compared at identical operating points.
+The LLM (LoRA r=16, 3 epochs on an RTX 4070 Ti SUPER) was scored by the likelihood it gives each allowed answer, so both models are compared at identical operating points. Its fine-tuning script and the tree baseline it was compared with have since been removed; they are kept at the tag [`llm-triage-experiment`](https://github.com/iosif75/aero-scan/tree/llm-triage-experiment) (`aeroscan/triage/train.py` and `baseline.py`).
 
 **Result: the fine-tuned LLM does not beat a conventional model here.** At the same detection rate it lets through about twice as many false alarms. With a few hundred examples of short numeric sequences, trees on hand-built features are the better tool. The gradient-boosted model trained on all 3,105 dev alerts does better still (ROC-AUC 0.975; 53 routine alerts kept at 80% recall).
 
@@ -179,7 +179,7 @@ uv run aeroscan triage build        # labelled alerts -> data/triage
 uv run aeroscan triage fit          # model -> models/triage_gbm.pkl, pipeline table -> eval/results
 ```
 
-`aeroscan eval --skip-bcn` runs without the Barcelona data; `--limit 50` is a quick smoke test. Fine-tuning the LLM for the triage comparison needs a CUDA GPU: `uv run --extra train python -m aeroscan.triage.train`.
+`aeroscan eval --skip-bcn` runs without the Barcelona data; `--limit 50` is a quick smoke test.
 
 ## Live monitoring and API
 
