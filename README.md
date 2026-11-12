@@ -214,12 +214,28 @@ The API is read-only: each request opens its own read-only SQLite connection, so
 - **Storage.** SQLite, standard library only: `alerts`, `polls`, a `positions` snapshot of the latest poll, and `meta` (mode, region, interval).
 - **Coverage caveat.** The evaluation measured coverage on adsb.lol data. OpenSky's receiver network around Catalonia may be thinner: a November afternoon test saw about 65 aircraft per poll in the box. Live detection rates can be lower than the offline ones where reports are missing.
 
+### Admin and alert review (Django)
+
+With the `django` extra installed, `aeroscan serve` also mounts a Django admin at `/admin/` (turn it off with `--no-admin`):
+
+```sh
+uv sync --extra api --extra django
+uv run aeroscan admin createuser        # first login; asks for a password
+uv run aeroscan serve                    # then open http://127.0.0.1:8000/admin/
+```
+
+- **Browse.** Alerts, the aircraft in the latest poll and the polls, with search (callsign, ICAO24, summary) and filters (rule, severity, date, review status). Each alert page shows its evidence and links to its track in the API and to the map. These pages are read-only: Django opens the monitor's database read-only, like the API.
+- **Review.** Mark alerts as a real event, a false alarm or unsure, in bulk from the list or one at a time with a note. Reviews record who made them and when.
+- **Labels.** `aeroscan admin labels --out labels.csv` exports every review with its alert (rule, severity, aircraft, triage score), as ground truth for retraining or checking the triage model on live traffic.
+- **Storage.** Django's users, sessions and the reviews go to a separate database beside the monitor's, `alerts.admin.sqlite` by default (`--admin-db`), so the poller's schema is never touched. The session signing key comes from `AEROSCAN_SECRET_KEY`, or is generated once and kept in `alerts.admin.sqlite.secret`. Without a terminal, `createuser` reads `--username` and `DJANGO_SUPERUSER_PASSWORD`.
+
 ## Roadmap
 
 1. ~~Rules and offline evaluation~~
 2. ~~Alert triage: learned real-vs-routine filter behind looser rules (gradient boosting beat a fine-tuned 1.5B LLM)~~
 3. ~~Live ingestion from the OpenSky REST API, with the triage pipeline and SQLite alert storage~~
 4. ~~REST API and map~~
+5. ~~Django admin and alert review~~
 
 ## Data and attribution
 

@@ -24,6 +24,9 @@ api = [
     "uvicorn>=0.32",
     "scikit-learn>=1.5",  # to load the triage model, if one has been built
 ]
+django = [
+    "django>=5.2",  # admin and alert review, mounted at /admin by `aeroscan serve`
+]
 
 [project.scripts]
 aeroscan = "aeroscan.cli:main"
@@ -53,14 +56,27 @@ target-version = "py312"
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF"]
 
+[tool.ruff.lint.per-file-ignores]
+"src/aeroscan/console/migrations/*" = ["RUF012"]  # Django's migration class attributes
+
 [tool.mypy]
 strict = true
 packages = ["aeroscan"]
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["pyarrow.*", "sklearn.*", "peft.*", "transformers.*"]
+module = ["pyarrow.*", "sklearn.*", "peft.*", "transformers.*", "django.*"]
 ignore_missing_imports = true
+
+# Django ships no type hints: its models and admin classes are Any to mypy.
+[[tool.mypy.overrides]]
+module = ["aeroscan.console.*"]
+disallow_subclassing_any = false
+disallow_untyped_decorators = false
+
+[[tool.mypy.overrides]]
+module = ["aeroscan.console.migrations.*"]
+ignore_errors = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

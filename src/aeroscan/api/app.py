@@ -335,8 +335,16 @@ def _sse(event: str, data: str, event_id: int | None = None) -> str:
     return f"{head}event: {event}\ndata: {data}\n\n"
 
 
-def create_app(db_path: Path | str, stream_check_s: float = 2.0) -> FastAPI:
-    """`stream_check_s`: how often the event stream looks for new alerts and polls."""
+def create_app(
+    db_path: Path | str,
+    stream_check_s: float = 2.0,
+    admin: bool = False,
+    admin_db: Path | str | None = None,
+) -> FastAPI:
+    """`stream_check_s`: how often the event stream looks for new alerts and polls.
+
+    `admin` mounts the Django admin and alert review at /admin (needs the `django` extra);
+    its users and reviews go to `admin_db`, by default next to `db_path`."""
     db_path = Path(db_path)
     app = FastAPI(
         title="Aero-Scan API",
@@ -917,5 +925,14 @@ def create_app(db_path: Path | str, stream_check_s: float = 2.0) -> FastAPI:
     @app.get("/", include_in_schema=False)
     def index() -> FileResponse:
         return FileResponse(STATIC / "index.html")
+
+    if admin:
+        from starlette.staticfiles import StaticFiles
+
+        from ..console import setup
+
+        setup.configure(db_path, admin_db)
+        app.mount(f"{setup.URL_PREFIX}/static", StaticFiles(directory=setup.static_dir()))
+        app.mount(setup.URL_PREFIX, setup.asgi_app())
 
     return app

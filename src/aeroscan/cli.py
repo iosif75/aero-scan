@@ -57,6 +57,25 @@ def main(argv: list[str] | None = None) -> None:
     sv.add_argument(
         "--no-live", action="store_true", help="serve an existing database without polling"
     )
+    sv.add_argument(
+        "--no-admin", action="store_true", help="don't mount the Django admin at /admin"
+    )
+
+    ad = sub.add_parser("admin", help="manage the Django admin's users and alert reviews")
+    asub = ad.add_subparsers(dest="admin_cmd", required=True)
+    au = asub.add_parser("createuser", help="create an admin login (asks for a password)")
+    au.add_argument("--username", default=None)
+    al = asub.add_parser("labels", help="export the alert reviews as CSV")
+    al.add_argument("--out", type=Path, default=None, help="file to write (default: stdout)")
+    for sp in (sv, au, al):
+        if sp is not sv:
+            sp.add_argument("--db", type=Path, default=Path("alerts.sqlite"))
+        sp.add_argument(
+            "--admin-db",
+            type=Path,
+            default=None,
+            help="admin users and reviews (default: <db>.admin.sqlite beside the database)",
+        )
 
     args, rest = p.parse_known_args(argv)
 
@@ -91,6 +110,8 @@ def main(argv: list[str] | None = None) -> None:
         _live(args)
     elif args.cmd == "serve":
         _serve(args)
+    elif args.cmd == "admin":
+        _admin(args)
 
 
 def _live(args: argparse.Namespace, max_polls: int | None = None) -> None:
@@ -144,13 +165,49 @@ def _serve(args: argparse.Namespace) -> None:
 
     from .api.app import create_app
 
+    admin = not args.no_admin and _has_django()
+    app = create_app(args.db, admin=admin, admin_db=args.admin_db)
     if not args.no_live:
         # The poller owns its own SQLite connection, created inside its thread.
         threading.Thread(target=_live, args=(args,), daemon=True, name="poller").start()
-    print(
-        f"Map and API: http://{args.host}:{args.port}/   docs: http://{args.host}:{args.port}/docs"
-    )
-    uvicorn.run(create_app(args.db), host=args.host, port=args.port, log_level="warning")
+    base = f"http://{args.host}:{args.port}"
+    print(f"Map and API: {base}/   docs: {base}/docs")
+    if admin:
+        print(f"Admin: {base}/admin/   (first login: `aeroscan admin createuser`)")
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
+
+
+def _has_django() -> bool:
+    import importlib.util
+
+    return importlib.util.find_spec("django") is not None
+
+
+def _admin(args: argparse.Namespace) -> None:
+    if not _has_django():
+        sys.exit("The admin needs Django: install the `django` extra (uv sync --extra django).")
+    from .console import setup
+
+    setup.configure(args.db, args.admin_db)
+    if args.admin_cmd == "createuser":
+        from django.core.management import CommandError, call_command
+
+        opts: dict[str, object] = {"username": args.username} if args.username else {}
+        if not sys.stdin.isatty():  # scripted: password from DJANGO_SUPERUSER_PASSWORD
+            opts.update(interactive=False, email="")
+        try:
+            call_command("createsuperuser", **opts)
+        except CommandError as e:
+            sys.exit(str(e))
+    elif args.admin_cmd == "labels":
+        from .console.labels import write_labels
+
+        if args.out is None:
+            write_labels(sys.stdout)
+        else:
+            with args.out.open("w", newline="") as f:
+                n = write_labels(f)
+            print(f"{n} reviewed alerts -> {args.out}")
 
 
 if __name__ == "__main__":

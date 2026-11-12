@@ -25,3 +25,4 @@ models/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+*.sqlite.secret
