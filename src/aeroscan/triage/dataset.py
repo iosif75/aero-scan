@@ -81,12 +81,7 @@ class Example:
     rule: str
     label: str  # real | routine
     cause: str  # one of CAUSE_CLASSES, "none" for routine
-    prompt: str
     features: dict[str, float] = field(default_factory=dict)
-
-    @property
-    def target(self) -> str:
-        return json.dumps({"verdict": self.label, "cause": self.cause})
 
 
 def anon(flight_id: str) -> str:
@@ -119,10 +114,8 @@ def from_squawk7700(traj: pd.DataFrame, meta: pd.DataFrame) -> Iterator[Example]
                 label, source, c = "real", "squawk7700", cause
             else:
                 continue
-            prompt, feats = describe(window, a)
-            yield Example(
-                f"{anon(fid)}#{k}", split_of(fid), source, a.rule, label, c, prompt, feats
-            )
+            feats = describe(window, a)
+            yield Example(f"{anon(fid)}#{k}", split_of(fid), source, a.rule, label, c, feats)
 
 
 def from_routine(df: pd.DataFrame, source: str) -> Iterator[Example]:
@@ -132,9 +125,9 @@ def from_routine(df: pd.DataFrame, source: str) -> Iterator[Example]:
         if len(g) < 5 or g["squawk"].isin(["7500", "7600", "7700"]).any():
             continue
         for k, (a, window) in enumerate(_alerts_with_context(poll_resample(g))):
-            prompt, feats = describe(window, a)
+            feats = describe(window, a)
             yield Example(
-                f"{anon(fid)}#{k}", split_of(fid), source, a.rule, "routine", "none", prompt, feats
+                f"{anon(fid)}#{k}", split_of(fid), source, a.rule, "routine", "none", feats
             )
 
 
@@ -170,7 +163,12 @@ def build(out_dir: Path) -> dict[str, dict[str, int]]:
 
 
 def load(path: Path) -> list[Example]:
-    return [Example(**json.loads(line)) for line in path.read_text().splitlines()]
+    examples = []
+    for line in path.read_text().splitlines():
+        d = json.loads(line)
+        d.pop("prompt", None)  # written by older versions, for the retired LLM triage
+        examples.append(Example(**d))
+    return examples
 
 
 if __name__ == "__main__":

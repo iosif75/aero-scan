@@ -11,14 +11,6 @@ dependencies = []
 [project.optional-dependencies]
 eval = ["pandas>=2.2", "pyarrow>=16"]
 triage = ["pandas>=2.2", "pyarrow>=16", "scikit-learn>=1.5"]
-train = [
-    "pandas>=2.2",
-    "pyarrow>=16",
-    "scikit-learn>=1.5",
-    "torch>=2.6",
-    "transformers>=4.46",
-    "peft>=0.13",
-]
 api = [
     "fastapi>=0.115",
     "uvicorn>=0.32",
@@ -65,7 +57,7 @@ packages = ["aeroscan"]
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["pyarrow.*", "sklearn.*", "peft.*", "transformers.*", "django.*"]
+module = ["pyarrow.*", "sklearn.*", "django.*"]
 ignore_missing_imports = true
 
 # Django ships no type hints: its models and admin classes are Any to mypy.
@@ -84,20 +76,3 @@ filterwarnings = [
     # Starlette 1.x wants the httpx2 package for its TestClient; plain httpx still works.
     "ignore:Using `httpx` with `starlette.testclient` is deprecated",
 ]
-
-# PyTorch: CUDA 12.8 build on Windows (consumer NVIDIA GPUs), CPU build on Linux/macOS.
-[tool.uv.sources]
-torch = [
-    { index = "pytorch-cu128", marker = "sys_platform == 'win32'" },
-    { index = "pytorch-cpu", marker = "sys_platform != 'win32'" },
-]
-
-[[tool.uv.index]]
-name = "pytorch-cu128"
-url = "https://download.pytorch.org/whl/cu128"
-explicit = true
-
-[[tool.uv.index]]
-name = "pytorch-cpu"
-url = "https://download.pytorch.org/whl/cpu"
-explicit = true

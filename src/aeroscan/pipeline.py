@@ -60,7 +60,7 @@ class Pipeline:
             if a.uses_squawk or a.severity < Severity.MEDIUM:
                 out.append(a)
                 continue
-            _, feats = describe(list(self.detector.recent(sv.icao24)), a)
+            feats = describe(list(self.detector.recent(sv.icao24)), a)
             keep, p = self.model.keep(feats)
             if keep:
                 out.append(replace(a, evidence={**a.evidence, "triage_p_real": round(p, 3)}))
