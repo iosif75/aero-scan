@@ -13,6 +13,9 @@ DEFAULT_TRIAGE_DATA = Path("data/triage")
 
 def main(argv: list[str] | None = None) -> None:
     argv = list(sys.argv[1:] if argv is None else argv)
+    from . import dotenv
+
+    dotenv.load()  # .env in the working directory, if there is one (see .env.example)
     p = argparse.ArgumentParser(prog="aeroscan")
     sub = p.add_subparsers(dest="cmd", required=True)
 
