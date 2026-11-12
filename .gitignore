@@ -11,8 +11,10 @@ build/
 # Downloaded datasets (fetched and checksummed by `aeroscan fetch-data`)
 data
 
-# Secrets
+# Secrets (.env.example is the committed template)
 .env
+.env.*
+!.env.example
 credentials.json
 
 # Per-flight evaluation output contains aircraft identifiers; the OpenSky data

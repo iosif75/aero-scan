@@ -36,7 +36,7 @@ uv run --extra api aeroscan serve
 ```
 The first run takes a minute or two to download Python and the dependencies. Then open **http://127.0.0.1:8000** for the map, or **http://127.0.0.1:8000/docs** for the interactive API documentation. Stop it with **Ctrl+C**. Alerts are kept in `alerts.sqlite` in the same folder, so they survive restarts.
 
-**4. Optional: OpenSky credentials, for all-day monitoring.** Without them it runs anonymously and pauses after about 6.7 hours a day. Create a free account at [opensky-network.org](https://opensky-network.org), add an API client on your Account page, download its `credentials.json`, and put it in the project folder. It is picked up automatically, and `.gitignore` keeps it out of git.
+**4. Optional: OpenSky credentials, for all-day monitoring.** Without them it runs anonymously and pauses after about 6.7 hours a day. Create a free account at [opensky-network.org](https://opensky-network.org), add an API client on your Account page, download its `credentials.json`, and put it in the project folder. It is picked up automatically, and `.gitignore` keeps it out of git. Or, if you prefer a `.env` file: copy `.env.example` to `.env` and fill in `OPENSKY_CLIENT_ID` and `OPENSKY_CLIENT_SECRET` from `credentials.json`; `.env` is git-ignored too.
 
 **5. Optional: the triage model.** Out of the box the monitor uses the strict rules. To run the better pipeline (loose rules + triage), build the model once; it needs the evaluation data, about 35 GB of downloads and an hour:
 ```bash
@@ -208,7 +208,7 @@ Times are UTC, and a time without a zone is read as UTC. Errors are JSON with a 
 
 The API is read-only: each request opens its own read-only SQLite connection, so it can't interfere with the poller (the database runs in WAL mode for concurrent reads). The poller keeps every position report for 24 hours (`--keep-tracks-hours`), so an alert can be shown with the path that raised it; at about 300 aircraft a minute that is roughly 430,000 rows, or under 100 MB. It listens on `127.0.0.1` by default. OpenSky's terms cover personal and research use, so check them before exposing the API publicly with `--host 0.0.0.0`.
 
-- **Credentials.** Without them, requests are anonymous: 400 credits a day, counted per IP address, so a 60 s poll runs out after about 6.7 hours. With an OpenSky API client (4,000 credits a day) it runs all day. Put OpenSky's `credentials.json` in the working directory, or set `OPENSKY_CLIENT_ID` and `OPENSKY_CLIENT_SECRET`. Tokens are refreshed before their 30-minute expiry.
+- **Credentials.** Without them, requests are anonymous: 400 credits a day, counted per IP address, so a 60 s poll runs out after about 6.7 hours. With an OpenSky API client (4,000 credits a day) it runs all day. Put OpenSky's `credentials.json` in the working directory, or set `OPENSKY_CLIENT_ID` and `OPENSKY_CLIENT_SECRET` (in the environment or in a `.env` file in the working directory, see `.env.example`). Tokens are refreshed before their 30-minute expiry.
 - **Cost.** The Barcelona box is 20 square degrees, which is 1 credit per poll: 1,440 a day at 60 s.
 - **Behaviour matches the evaluation.** Polls land on a fixed 60 s grid, reports older than one interval are dropped, and units are converted to feet, knots and ft/min at the API boundary.
 - **Storage.** SQLite, standard library only: `alerts`, `polls`, a `positions` snapshot of the latest poll, and `meta` (mode, region, interval).
