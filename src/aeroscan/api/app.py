@@ -7,8 +7,6 @@ corrupt the poller that writes the database. Interactive docs at /docs.
 from __future__ import annotations
 
 import asyncio
-import base64
-import binascii
 import csv
 import hashlib
 import io
@@ -16,318 +14,39 @@ import json
 import sqlite3
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
-from fastapi import Path as PathParam
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from pydantic import BaseModel, ConfigDict, Field
+from fastapi.responses import FileResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from .. import __version__
 from ..rules import default_rules, describe_rules
+from .geo import GeoCollection, GeoFeature, GeoJSONResponse, point, track_features
+from .params import AlertFilter, Icao24, alert_filters, decode_cursor, encode_cursor, utc
+from .schemas import (
+    AircraftDetailOut,
+    AircraftOut,
+    AlertOut,
+    AlertTrackOut,
+    ErrorOut,
+    HealthOut,
+    PollOut,
+    RuleOut,
+    RulesOut,
+    StatsOut,
+    TimelineBucketOut,
+    TimelineOut,
+    TrackPointOut,
+)
 
 STATIC = Path(__file__).parent / "static"
-Severity = Literal["INFO", "LOW", "MEDIUM", "HIGH"]
-Icao24 = Annotated[
-    str,
-    PathParam(pattern=r"^[0-9a-fA-F]{6}$", description="ICAO 24-bit address, hex"),
-]
 MAX_TIMELINE_BUCKETS = 1000
 KEEPALIVE_S = 15.0
 NO_ETAG_PATHS = {"/api/v1/stream"}
-
-
-class ErrorOut(BaseModel):
-    detail: str = Field(examples=["Alert not found"])
-
-
-class GeoJSONResponse(JSONResponse):
-    media_type = "application/geo+json"
-
-
-class GeoFeature(BaseModel):
-    type: Literal["Feature"] = "Feature"
-    geometry: dict[str, Any] = Field(description="GeoJSON geometry: [longitude, latitude]")
-    properties: dict[str, Any]
-
-
-class GeoCollection(BaseModel):
-    type: Literal["FeatureCollection"] = "FeatureCollection"
-    features: list[GeoFeature]
-
-
-class AlertOut(BaseModel):
-    id: int
-    detected_at: datetime
-    rule: str = Field(examples=["rapid_descent"])
-    severity: Severity
-    icao24: str = Field(description="ICAO 24-bit transponder address, hex")
-    callsign: str | None
-    summary: str
-    evidence: dict[str, Any]
-    p_real: float | None = Field(description="Triage model's probability that the alert is real")
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [
-                {
-                    "id": 412,
-                    "detected_at": "2026-11-11T13:42:00+00:00",
-                    "rule": "turnback",
-                    "severity": "MEDIUM",
-                    "icao24": "3443c5",
-                    "callsign": "VLG12AB",
-                    "summary": "Track changed 171° (from 228° to 57°) at 24,000 ft and held",
-                    "evidence": {
-                        "initial_track_deg": 228.0,
-                        "current_track_deg": 57.0,
-                        "cumulative_turn_deg": 171,
-                        "altitude_ft": 24000.0,
-                        "recent_climb_fpm": 0,
-                        "triage_p_real": 0.83,
-                    },
-                    "p_real": 0.83,
-                }
-            ]
-        }
-    )
-
-
-class AircraftOut(BaseModel):
-    icao24: str
-    callsign: str | None
-    seen_at: datetime
-    latitude: float
-    longitude: float
-    altitude_ft: float | None
-    groundspeed_kt: float | None
-    track_deg: float | None
-    vertical_rate_fpm: float | None
-    squawk: str | None
-    on_ground: bool
-    alerted: bool = Field(description="An alert was raised for this aircraft recently")
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "examples": [
-                {
-                    "icao24": "3443c5",
-                    "callsign": "VLG12AB",
-                    "seen_at": "2026-11-11T13:42:00+00:00",
-                    "latitude": 41.52,
-                    "longitude": 2.61,
-                    "altitude_ft": 24000.0,
-                    "groundspeed_kt": 412.5,
-                    "track_deg": 47.3,
-                    "vertical_rate_fpm": 0.0,
-                    "squawk": "2161",
-                    "on_ground": False,
-                    "alerted": True,
-                }
-            ]
-        }
-    )
-
-
-class TrackPointOut(BaseModel):
-    seen_at: datetime
-    latitude: float
-    longitude: float
-    altitude_ft: float | None
-    groundspeed_kt: float | None
-    track_deg: float | None
-    vertical_rate_fpm: float | None
-    squawk: str | None
-    on_ground: bool
-
-
-class AircraftDetailOut(BaseModel):
-    icao24: str
-    callsign: str | None = Field(description="Most recent callsign seen")
-    current: AircraftOut | None = Field(description="Its state in the latest poll, if present")
-    track: list[TrackPointOut] = Field(description="Position history, oldest first")
-    alerts: list[AlertOut] = Field(description="Its most recent alerts, newest first")
-
-
-class AlertTrackOut(BaseModel):
-    alert: AlertOut
-    track: list[TrackPointOut] = Field(description="Positions around the alert, oldest first")
-
-
-class PollOut(BaseModel):
-    polled_at: datetime
-    aircraft: int
-    alerts: int
-    suppressed: int = Field(description="Alerts the triage model filtered out")
-    credits_remaining: int | None
-
-
-class StatsOut(BaseModel):
-    mode: str | None
-    region: str | None
-    interval_s: float | None
-    polls: int
-    last_poll_at: datetime | None
-    aircraft_now: int
-    alerts_total: int
-    alerts_last_24h: int
-    alerts_by_rule: dict[str, int]
-    suppressed_total: int
-    credits_remaining: int | None
-
-
-class TimelineBucketOut(BaseModel):
-    start: datetime
-    alerts: int
-    alerts_by_rule: dict[str, int]
-    suppressed: int = Field(description="Alerts the triage model filtered out")
-    polls: int
-
-
-class TimelineOut(BaseModel):
-    bucket: Literal["hour", "day"]
-    since: datetime
-    until: datetime
-    buckets: list[TimelineBucketOut]
-
-
-class RuleOut(BaseModel):
-    name: str = Field(examples=["turnback"])
-    summary: str
-    description: str
-    parameters: dict[str, float | int | str | bool] = Field(
-        description="The rule's thresholds as configured"
-    )
-    alerts_total: int
-    alerts_last_24h: int
-    last_alert_at: datetime | None
-
-
-class RulesOut(BaseModel):
-    mode: str | None
-    live: bool = Field(
-        description="True if this is the rule set the monitor reported; false if it is the"
-        " strict default set, shown because the database predates rule reporting"
-    )
-    rules: list[RuleOut]
-
-
-class HealthOut(BaseModel):
-    status: Literal["ok", "stale", "no_data"]
-    version: str
-    last_poll_at: datetime | None
-
-
-def _utc(t: datetime) -> datetime:
-    """Times without a zone are read as UTC, the zone everything is stored in."""
-    return t.replace(tzinfo=UTC) if t.tzinfo is None else t.astimezone(UTC)
-
-
-def _encode_cursor(detected_at: str, alert_id: int) -> str:
-    return base64.urlsafe_b64encode(f"{detected_at}|{alert_id}".encode()).decode().rstrip("=")
-
-
-def _decode_cursor(cursor: str) -> tuple[str, int]:
-    try:
-        raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)).decode()
-        detected_at, alert_id = raw.rsplit("|", 1)
-        datetime.fromisoformat(detected_at)
-        return detected_at, int(alert_id)
-    except (binascii.Error, UnicodeDecodeError, ValueError) as e:
-        raise HTTPException(400, "Invalid cursor") from e
-
-
-@dataclass(frozen=True)
-class AlertFilter:
-    """SQL conditions (joined with AND) and their parameters, shared by the alert listings."""
-
-    where: list[str]
-    params: list[Any]
-
-    @property
-    def sql(self) -> str:
-        return " WHERE " + " AND ".join(self.where) if self.where else ""
-
-
-def alert_filters(
-    since: Annotated[
-        datetime | None, Query(description="Alerts at or after this time (no zone: UTC)")
-    ] = None,
-    until: Annotated[
-        datetime | None, Query(description="Alerts before this time (no zone: UTC)")
-    ] = None,
-    rule: Annotated[
-        list[str] | None, Query(description="Repeat to match any of several rules")
-    ] = None,
-    severity: Annotated[
-        list[Severity] | None, Query(description="Repeat to match any of several")
-    ] = None,
-    icao24: str | None = None,
-    callsign: Annotated[
-        str | None, Query(description="Callsign prefix, any case, e.g. VLG for Vueling")
-    ] = None,
-    min_p_real: Annotated[
-        float | None,
-        Query(ge=0, le=1, description="Only alerts the triage model scored at least this"),
-    ] = None,
-) -> AlertFilter:
-    where: list[str] = []
-    params: list[Any] = []
-    if since:
-        where.append("detected_at >= ?")
-        params.append(_utc(since).isoformat())
-    if until:
-        where.append("detected_at < ?")
-        params.append(_utc(until).isoformat())
-    for col, values in (("rule", rule), ("severity", severity)):
-        if values:
-            where.append(f"{col} IN ({', '.join('?' * len(values))})")
-            params.extend(values)
-    if icao24:
-        where.append("icao24 = ?")
-        params.append(icao24.lower())
-    if callsign:
-        prefix = callsign.strip().upper()
-        for ch in "\\%_":  # match them literally, not as LIKE wildcards
-            prefix = prefix.replace(ch, "\\" + ch)
-        where.append("UPPER(callsign) LIKE ? ESCAPE '\\'")
-        params.append(prefix + "%")
-    if min_p_real is not None:
-        where.append("p_real >= ?")
-        params.append(min_p_real)
-    return AlertFilter(where, params)
-
-
-def _point(lon: float, lat: float) -> dict[str, Any]:
-    return {"type": "Point", "coordinates": [lon, lat]}
-
-
-def _track_feature(icao24: str, points: list[TrackPointOut]) -> list[GeoFeature]:
-    """A track as one LineString, or a Point if there is a single report, or nothing."""
-    if not points:
-        return []
-    coords = [[p.longitude, p.latitude] for p in points]
-    geometry = (
-        {"type": "LineString", "coordinates": coords} if len(coords) > 1 else _point(*coords[0])
-    )
-    return [
-        GeoFeature(
-            geometry=geometry,
-            properties={
-                "kind": "track",
-                "icao24": icao24,
-                "start": points[0].seen_at.isoformat(),
-                "end": points[-1].seen_at.isoformat(),
-                "seen_at": [p.seen_at.isoformat() for p in points],
-                "altitude_ft": [p.altitude_ft for p in points],
-            },
-        )
-    ]
 
 
 def _sse(event: str, data: str, event_id: int | None = None) -> str:
@@ -413,6 +132,15 @@ def create_app(
     def alert_out(r: sqlite3.Row) -> AlertOut:
         return AlertOut(**{**dict(r), "evidence": json.loads(r["evidence"])})
 
+    def get_alert(conn: sqlite3.Connection, alert_id: int) -> AlertOut:
+        r = conn.execute("SELECT * FROM alerts WHERE id = ?", (alert_id,)).fetchone()
+        if r is None:
+            raise HTTPException(404, "Alert not found")
+        return alert_out(r)
+
+    def aircraft_out(r: sqlite3.Row, alerted: bool) -> AircraftOut:
+        return AircraftOut(**{**dict(r), "on_ground": bool(r["on_ground"]), "alerted": alerted})
+
     def track(
         conn: sqlite3.Connection, icao24: str, start: datetime, end: datetime | None = None
     ) -> list[TrackPointOut]:
@@ -470,24 +198,22 @@ def create_app(
             int, Query(ge=0, description="Prefer `cursor`: stable while new alerts arrive")
         ] = 0,
     ) -> list[AlertOut]:
-        where, params = f.where, f.params
-        page_where, page_params = list(where), list(params)
+        page = f
         if cursor:
-            at, last_id = _decode_cursor(cursor)
-            page_where.append("(detected_at < ? OR (detected_at = ? AND id < ?))")
-            page_params += [at, at, last_id]
-        sql = "SELECT * FROM alerts"
-        if page_where:
-            sql += " WHERE " + " AND ".join(page_where)
-        sql += " ORDER BY detected_at DESC, id DESC LIMIT ? OFFSET ?"
+            at, last_id = decode_cursor(cursor)
+            page = f.and_("(detected_at < ? OR (detected_at = ? AND id < ?))", at, at, last_id)
         with db() as conn:
-            total = conn.execute(f"SELECT COUNT(*) FROM alerts{f.sql}", params).fetchone()[0]
-            rows = conn.execute(sql, [*page_params, limit + 1, offset]).fetchall()
+            total = conn.execute(f"SELECT COUNT(*) FROM alerts{f.sql}", f.params).fetchone()[0]
+            rows = conn.execute(
+                f"SELECT * FROM alerts{page.sql}"
+                " ORDER BY detected_at DESC, id DESC LIMIT ? OFFSET ?",
+                [*page.params, limit + 1, offset],
+            ).fetchall()
         response.headers["X-Total-Count"] = str(total)
         if len(rows) > limit:
             last = rows[limit - 1]
             nxt = request.url.remove_query_params("offset").include_query_params(
-                cursor=_encode_cursor(last["detected_at"], last["id"])
+                cursor=encode_cursor(last["detected_at"], last["id"])
             )
             response.headers["Link"] = f'<{nxt}>; rel="next"'
         return [alert_out(r) for r in rows[:limit]]
@@ -500,10 +226,7 @@ def create_app(
     )
     def alert(alert_id: int) -> AlertOut:
         with db() as conn:
-            r = conn.execute("SELECT * FROM alerts WHERE id = ?", (alert_id,)).fetchone()
-        if r is None:
-            raise HTTPException(404, "Alert not found")
-        return alert_out(r)
+            return get_alert(conn, alert_id)
 
     @app.get(
         "/api/v1/alerts/{alert_id}/track",
@@ -522,10 +245,7 @@ def create_app(
     ) -> AlertTrackOut:
         """The alert with the flight path around it: what the rule saw, and what followed."""
         with db() as conn:
-            r = conn.execute("SELECT * FROM alerts WHERE id = ?", (alert_id,)).fetchone()
-            if r is None:
-                raise HTTPException(404, "Alert not found")
-            a = alert_out(r)
+            a = get_alert(conn, alert_id)
             points = track(
                 conn,
                 a.icao24,
@@ -549,12 +269,7 @@ def create_app(
                 )
             }
             rows = conn.execute("SELECT * FROM positions ORDER BY icao24").fetchall()
-        return [
-            AircraftOut(
-                **{**dict(r), "on_ground": bool(r["on_ground"]), "alerted": r["icao24"] in alerted}
-            )
-            for r in rows
-        ]
+        return [aircraft_out(r, r["icao24"] in alerted) for r in rows]
 
     @app.get(
         "/api/v1/aircraft/{icao24}",
@@ -598,13 +313,7 @@ def create_app(
                     raise HTTPException(404, "Aircraft not seen")
         cutoff = now - timedelta(minutes=alerted_within_min)
         current = (
-            AircraftOut(
-                **{
-                    **dict(pos),
-                    "on_ground": bool(pos["on_ground"]),
-                    "alerted": any(a.detected_at >= cutoff for a in recent),
-                }
-            )
+            aircraft_out(pos, any(a.detected_at >= cutoff for a in recent))
             if pos is not None
             else None
         )
@@ -700,9 +409,9 @@ def create_app(
         """Alerts per rule, filtered alerts and polls in each UTC hour or day, with empty
         buckets included so the series can be charted directly."""
         step = timedelta(hours=1) if bucket == "hour" else timedelta(days=1)
-        end = _utc(until) if until else datetime.now(UTC)
+        end = utc(until) if until else datetime.now(UTC)
         start = (
-            _utc(since)
+            utc(since)
             if since
             else end - (timedelta(days=1) if bucket == "hour" else timedelta(days=30))
         )
@@ -749,13 +458,13 @@ def create_app(
     @app.get(
         "/api/v1/alerts.csv",
         tags=["export"],
-        response_class=StreamingResponse,
+        response_class=Response,
         responses={200: {"content": {"text/csv": {}}, "description": "Alerts as CSV"}},
     )
     def alerts_csv(
         f: Annotated[AlertFilter, Depends(alert_filters)],
         limit: Annotated[int, Query(ge=1, le=100_000)] = 10_000,
-    ) -> StreamingResponse:
+    ) -> Response:
         """Alerts matching the same filters as `/api/v1/alerts`, newest first, as CSV
         (`evidence` is a JSON column), for spreadsheets and notebooks."""
         with db() as conn:
@@ -769,8 +478,8 @@ def create_app(
         out.writerow(cols)
         for r in rows:
             out.writerow(["" if r[c] is None else r[c] for c in cols])
-        return StreamingResponse(
-            iter([buf.getvalue()]),
+        return Response(
+            buf.getvalue(),
             media_type="text/csv; charset=utf-8",
             headers={"Content-Disposition": 'attachment; filename="alerts.csv"'},
         )
@@ -790,7 +499,7 @@ def create_app(
         features = []
         for a in aircraft(alerted_within_min):
             props = a.model_dump(mode="json", exclude={"latitude", "longitude"})
-            features.append(GeoFeature(geometry=_point(a.longitude, a.latitude), properties=props))
+            features.append(GeoFeature(geometry=point(a.longitude, a.latitude), properties=props))
         return GeoCollection(features=features)
 
     @app.get(
@@ -808,7 +517,7 @@ def create_app(
     ) -> GeoCollection:
         """An aircraft's recent track as a GeoJSON LineString."""
         d = aircraft_detail(icao24, minutes=minutes, alerts_limit=0, alerted_within_min=0)
-        return GeoCollection(features=_track_feature(d.icao24, d.track))
+        return GeoCollection(features=track_features(d.icao24, d.track))
 
     @app.get(
         "/api/v1/geo/alerts/{alert_id}",
@@ -824,13 +533,11 @@ def create_app(
     ) -> GeoCollection:
         """An alert as GeoJSON: the track around it, and a point where it was raised."""
         t = alert_track(alert_id, before_min=before_min, after_min=after_min)
-        features = _track_feature(t.alert.icao24, t.track)
+        features = track_features(t.alert.icao24, t.track)
         if t.track:
             at = min(t.track, key=lambda p: abs(p.seen_at - t.alert.detected_at))
             props = {"kind": "alert", **t.alert.model_dump(mode="json")}
-            features.append(
-                GeoFeature(geometry=_point(at.longitude, at.latitude), properties=props)
-            )
+            features.append(GeoFeature(geometry=point(at.longitude, at.latitude), properties=props))
         return GeoCollection(features=features)
 
     def read_new(after_id: int, after_poll: str) -> tuple[list[AlertOut], list[PollOut]]:

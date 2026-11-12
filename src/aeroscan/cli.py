@@ -35,6 +35,9 @@ def main(argv: list[str] | None = None) -> None:
     tf.add_argument("--data", type=Path, default=DEFAULT_TRIAGE_DATA)
     tf.add_argument("--report", type=Path, default=Path("eval/results/report.json"))
     tf.add_argument("--model", type=Path, default=DEFAULT_MODEL)
+    tf.add_argument(
+        "--out", type=Path, default=Path("eval/results/pipeline.json"), help="pipeline table"
+    )
 
     lv = sub.add_parser("live", help="monitor the Barcelona region from the OpenSky API")
     sv = sub.add_parser("serve", help="run the monitor plus the REST API and map")
@@ -103,7 +106,7 @@ def main(argv: list[str] | None = None) -> None:
         from .triage.model import main as fit_main
 
         result = fit_main(args.data, args.report, args.model)
-        Path("eval/results/pipeline.json").write_text(json.dumps(result, indent=2))
+        args.out.write_text(json.dumps(result, indent=2))
         print(json.dumps(result, indent=2))
         print(f"model saved to {args.model}")
     elif args.cmd == "live":
