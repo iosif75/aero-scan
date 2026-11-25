@@ -174,3 +174,6 @@ class HealthOut(BaseModel):
     status: Literal["ok", "stale", "no_data"]
     version: str
     last_poll_at: datetime | None
+    source: str = Field(
+        "opensky", description="where live data comes from: `opensky` or `ingest` (aero-ingest)"
+    )
