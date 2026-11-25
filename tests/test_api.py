@@ -325,3 +325,16 @@ def test_openapi_documents_errors_and_examples(client: TestClient) -> None:
     assert "503" in detail
     assert spec["components"]["schemas"]["AlertOut"]["examples"][0]["rule"] == "turnback"
     assert "/api/v1/stream" in spec["paths"] and "/api/v1/alerts.csv" in spec["paths"]
+
+
+def test_health_uses_the_feeds_stale_limit(tmp_path: Path) -> None:
+    path = tmp_path / "alerts.sqlite"
+    store = AlertStore(path)
+    store.set_meta({"interval_s": "60.0", "source": "ingest", "stale_after_s": "180"})
+    store.add_poll(datetime.now(UTC) - timedelta(seconds=210), 0, 0, 0, None)
+    c = TestClient(create_app(path))
+    h = c.get("/api/v1/health").json()
+    assert (h["status"], h["source"]) == ("stale", "ingest")
+    store.set_meta({"source": "opensky", "stale_after_s": ""})  # back to 3 intervals + 60 s
+    h = c.get("/api/v1/health").json()
+    assert (h["status"], h["source"]) == ("ok", "opensky")

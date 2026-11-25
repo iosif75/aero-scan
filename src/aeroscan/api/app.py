@@ -164,15 +164,24 @@ def create_app(
     @app.get("/api/v1/health", response_model=HealthOut, tags=["status"])
     def health() -> HealthOut:
         if not db_path.exists():
-            return HealthOut(status="no_data", version=__version__, last_poll_at=None)
+            return HealthOut(
+                status="no_data", version=__version__, last_poll_at=None, source="opensky"
+            )
         with db() as conn:
             row = conn.execute("SELECT MAX(polled_at) AS t FROM polls").fetchone()
-            interval = float(meta(conn).get("interval_s", 60))
+            m = meta(conn)
+        source = m.get("source", "opensky")
         if row["t"] is None:
-            return HealthOut(status="no_data", version=__version__, last_poll_at=None)
+            return HealthOut(
+                status="no_data", version=__version__, last_poll_at=None, source=source
+            )
         last = datetime.fromisoformat(row["t"])
-        stale = datetime.now(UTC) - last > timedelta(seconds=3 * interval + 60)
-        return HealthOut(status="stale" if stale else "ok", version=__version__, last_poll_at=last)
+        # The poller can record its own limit (the aero-ingest feed uses 3 minutes).
+        limit = float(m.get("stale_after_s") or 3 * float(m.get("interval_s", 60)) + 60)
+        stale = datetime.now(UTC) - last > timedelta(seconds=limit)
+        return HealthOut(
+            status="stale" if stale else "ok", version=__version__, last_poll_at=last, source=source
+        )
 
     @app.get(
         "/api/v1/alerts",

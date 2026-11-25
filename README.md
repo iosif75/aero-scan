@@ -185,6 +185,16 @@ uv run aeroscan triage fit          # model -> models/triage_gbm.pkl, pipeline t
 
 `aeroscan serve` runs the poller in the background and the API in front of it; `aeroscan live` runs the poller alone, and `aeroscan serve --no-live` serves an existing database. The pipeline uses the triage model if `models/triage_gbm.pkl` exists and falls back to the strict rules otherwise. Emergency squawks are never filtered.
 
+### Reading from aero-ingest
+
+By default the poller calls OpenSky itself. With [aero-ingest](https://github.com/iosif75/aero-ingest) running (it polls OpenSky every 60 s and keeps the OpenSky credentials and credits in one place), Aero-Scan can follow the daemon's poll feed instead:
+
+```bash
+uv run --extra api aeroscan serve --source ingest --ingest-url http://127.0.0.1:9090
+```
+
+Every 5 s (`--ingest-check`) it asks `GET /polls?after=<cursor>` for new polls and runs each one through the pipeline in order, with the same unit conversion and the same stale-report rule as the direct poller. A new database starts from the daemon's latest poll, so old polls aren't replayed; the cursor is kept in the database's `meta` table, written with each poll, so a restart carries on where it stopped. If the daemon can't be reached, the poller logs it, backs off (up to 5 minutes) and keeps the cursor. It warns if the daemon polls a different box than Aero-Scan's region, and logs gaps in the feed; the detector never reasons across a gap longer than 5 minutes. `/api/v1/health` reports `stale` when no poll has arrived for 3 minutes, and names the source.
+
 | Endpoint | Returns |
 | --- | --- |
 | `GET /api/v1/alerts` | Alerts, newest first. Filters: `since`, `until` (no zone means UTC), `rule` and `severity` (repeat for several), `icao24`, `callsign` (prefix, any case), `min_p_real`. Paging: `limit` (≤ 500) and `cursor`, from the `Link: rel="next"` header; `X-Total-Count` gives the number of matches |
@@ -196,7 +206,7 @@ uv run aeroscan triage fit          # model -> models/triage_gbm.pkl, pipeline t
 | `GET /api/v1/polls` | Recent polls: aircraft seen, alerts raised and filtered, credits left |
 | `GET /api/v1/stats` | Mode, counts, alerts in the last 24 h by rule, credits left |
 | `GET /api/v1/stats/timeline` | Alerts by rule, filtered alerts and polls per UTC `hour` or `day` bucket, empty buckets included |
-| `GET /api/v1/health` | `ok`, `stale` (monitor not polling) or `no_data` |
+| `GET /api/v1/health` | `ok`, `stale` (monitor not polling) or `no_data`, and the `source` (`opensky` or `ingest`) |
 | `GET /api/v1/stream` | Server-sent events: `alert` as each alert is stored, `poll` after each poll. Reconnects resume from `Last-Event-ID`; `after_id=0` replays every alert first |
 | `GET /api/v1/alerts.csv` | Alerts as CSV, with the same filters as `/alerts` (`limit` ≤ 100,000) |
 | `GET /api/v1/geo/aircraft` | Aircraft in the latest poll as GeoJSON points |

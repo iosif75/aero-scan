@@ -42,13 +42,32 @@ def main(argv: list[str] | None = None) -> None:
         "--out", type=Path, default=Path("eval/results/pipeline.json"), help="pipeline table"
     )
 
-    lv = sub.add_parser("live", help="monitor the Barcelona region from the OpenSky API")
+    lv = sub.add_parser(
+        "live", help="monitor the Barcelona region from the OpenSky API or aero-ingest"
+    )
     sv = sub.add_parser("serve", help="run the monitor plus the REST API and map")
     for sp in (lv, sv):
         sp.add_argument("--interval", type=float, default=60.0, help="seconds between polls")
         sp.add_argument("--db", type=Path, default=Path("alerts.sqlite"))
         sp.add_argument("--model", type=Path, default=DEFAULT_MODEL, help="triage model, if built")
         sp.add_argument("--credentials", type=Path, default=Path("credentials.json"))
+        sp.add_argument(
+            "--source",
+            choices=("opensky", "ingest"),
+            default="opensky",
+            help="poll OpenSky directly (default) or follow the aero-ingest daemon's feed",
+        )
+        sp.add_argument(
+            "--ingest-url",
+            default="http://127.0.0.1:9090",
+            help="aero-ingest's API, for --source ingest (default http://127.0.0.1:9090)",
+        )
+        sp.add_argument(
+            "--ingest-check",
+            type=float,
+            default=5.0,
+            help="seconds between checks of the aero-ingest feed (default 5)",
+        )
         sp.add_argument(
             "--keep-tracks-hours",
             type=float,
@@ -121,6 +140,9 @@ def main(argv: list[str] | None = None) -> None:
 
 
 def _live(args: argparse.Namespace, max_polls: int | None = None) -> None:
+    if getattr(args, "source", "opensky") == "ingest":
+        _live_ingest(args, max_polls)
+        return
     from .live.opensky import Credentials, OpenSkyClient
     from .live.run import budget_warning, run
     from .live.store import AlertStore
@@ -145,6 +167,8 @@ def _live(args: argparse.Namespace, max_polls: int | None = None) -> None:
             "region": BARCELONA.name,
             "interval_s": str(args.interval),
             "keep_tracks_hours": str(args.keep_tracks_hours),
+            "source": "opensky",
+            "stale_after_s": "",
         }
     )
     store.set_rules(pipeline.detector.rules)
@@ -156,6 +180,48 @@ def _live(args: argparse.Namespace, max_polls: int | None = None) -> None:
             store,
             args.interval,
             max_polls or getattr(args, "polls", None),
+            keep_tracks=timedelta(hours=args.keep_tracks_hours),
+        )
+    except KeyboardInterrupt:
+        print("stopped")
+    finally:
+        store.close()
+
+
+def _live_ingest(args: argparse.Namespace, max_polls: int | None = None) -> None:
+    from .live.ingest import IngestClient
+    from .live.run import run_feed
+    from .live.store import AlertStore
+    from .pipeline import Pipeline
+    from .region import BARCELONA
+
+    client = IngestClient(args.ingest_url, max_age_s=args.interval)
+    pipeline = Pipeline.from_model_file(args.model)
+    print(
+        f"Following aero-ingest at {client.base_url} for {BARCELONA.name} "
+        f"(checking every {args.ingest_check:.0f} s), {pipeline.mode}; alerts -> {args.db}"
+    )
+    store = AlertStore(args.db)
+    store.set_meta(
+        {
+            "mode": pipeline.mode,
+            "region": BARCELONA.name,
+            "interval_s": str(args.interval),
+            "keep_tracks_hours": str(args.keep_tracks_hours),
+            "source": "ingest",
+            "stale_after_s": "180",
+        }
+    )
+    store.set_rules(pipeline.detector.rules)
+    try:
+        run_feed(
+            BARCELONA,
+            pipeline,
+            client,
+            store,
+            check_s=args.ingest_check,
+            interval_s=args.interval,
+            max_polls=max_polls or getattr(args, "polls", None),
             keep_tracks=timedelta(hours=args.keep_tracks_hours),
         )
     except KeyboardInterrupt:

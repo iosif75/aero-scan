@@ -112,14 +112,18 @@ class AlertStore:
         suppressed: int,
         credits: int | None,
         keep_tracks: timedelta = DEFAULT_TRACK_RETENTION,
+        meta: dict[str, str] | None = None,
     ) -> None:
         """Everything one poll produced, in one transaction: its alerts, the aircraft
-        snapshot and track history, and the poll itself."""
+        snapshot and track history, the poll itself and any `meta` values (such as the
+        feed cursor, so a restart resumes exactly after the last stored poll)."""
         with self.db:
             for a in alerts:
                 self._insert_alert(a)
             self._replace_positions(svs, at, keep_tracks)
             self._insert_poll(at, len(svs), len(alerts), suppressed, credits)
+            if meta:
+                self._set_meta(meta)
 
     def add_alert(self, a: Alert) -> None:
         with self.db:
@@ -195,7 +199,14 @@ class AlertStore:
 
     def set_meta(self, values: dict[str, str]) -> None:
         with self.db:
-            self.db.executemany("INSERT OR REPLACE INTO meta VALUES (?, ?)", list(values.items()))
+            self._set_meta(values)
+
+    def get_meta(self, key: str) -> str | None:
+        row = self.db.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+        return None if row is None else str(row[0])
+
+    def _set_meta(self, values: dict[str, str]) -> None:
+        self.db.executemany("INSERT OR REPLACE INTO meta VALUES (?, ?)", list(values.items()))
 
     def close(self) -> None:
         self.db.close()
